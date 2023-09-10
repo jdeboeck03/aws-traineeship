@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: init-deployment
-  namespace: admin
+  namespace: deboeck
   labels:
     owner: deboeck
 spec:

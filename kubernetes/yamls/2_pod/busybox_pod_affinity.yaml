@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: naked-pod-demo
-  namespace: default
+  namespace: deboeck
 spec:
   affinity:
     nodeAffinity:
