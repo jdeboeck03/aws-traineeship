@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: configmap-deployment
+  namespace: deboeck
+  labels:
+    owner: deboeck
+spec:
+  selector:
+    matchLabels:
+      app: configmap-deployment
+      owner: deboeck
+  template:
+    metadata:
+      labels:
+        app: configmap-deployment
+        owner: deboeck
+    spec:
+      containers:
+      - name: init-pod
+        image: busybox
+        command: ["sh", "-c", 'while true; do echo "Hello World!"; sleep 30; done']
+        env:
+          - name: DEMO_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-demo
+                key: demo_name 

@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: init-deployment
+  namespace: deboeck
+  labels:
+    owner: deboeck
+spec:
+  selector:
+    matchLabels:
+      app: init-deployment
+      owner: deboeck
+  template:
+    metadata:
+      labels:
+        app: init-deployment
+        owner: deboeck
+    spec:
+      containers:
+      - name: init-pod
+        image: busybox
+        command: ["sh", "-c", 'while true; do echo "Hello World!"; sleep 30; done']

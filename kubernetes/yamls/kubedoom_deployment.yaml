@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubedoom-farm-deployment
+  namespace: kubedoom-farm
+  labels:
+    owner: deboeck
+spec:
+  replicas: 5      
+  selector:
+    matchLabels:
+      app: kubedoom-farm-deployment
+      owner: deboeck
+  template:
+    metadata:
+      labels:
+        app: kubedoom-farm-deployment
+        owner: deboeck
+    spec:
+      containers:
+      - name: kubedoom-farm-pod
+        image: busybox
+        command: ["sh", "-c", 'while true; do echo "Hello World!"; sleep 30; done']

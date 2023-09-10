@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: init-deployment
+  namespace: admin
+  labels:
+    owner: deboeck
+spec:
+  selector:
+    matchLabels:
+      app: init-deployment
+      owner: deboeck
+  template:
+    metadata:
+      labels:
+        app: init-deployment
+        owner: deboeck
+    spec:
+      nodeSelector:
+        owner: "jeff"
+      containers:
+      - name: init-pod
+        image: busybox
+        command: ["sh", "-c", 'while true; do echo "Hello World!"; sleep 30; done']

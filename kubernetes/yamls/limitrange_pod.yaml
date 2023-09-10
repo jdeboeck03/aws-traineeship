@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: limitrange-nginx
+  namespace: deboeck
+  labels:
+    app: nginx
+    owner: deboeck
+spec:
+  containers:
+  - name: limitrange-nginx
+    image: nginx
+    resources:
+      limits:
+        cpu: "900m"
+      requests:
+        cpu: "800m"    
