@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  namespace: deboeck
+  labels:
+    app: nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx
+        volumeMounts:
+        - mountPath: /usr/share/nginx/html
+          name: nginx-data
+        ports:
+        - containerPort: 80
+      - name: index-generator
+        image: debian
+        volumeMounts:
+        - name: nginx-data
+          mountPath: /html
+        command: ["/bin/sh", "-c"]
+        args:
+          - while true; do
+            date >> /html/index.html;
+            sleep 1;
+            done
+      volumes:
+      - name: nginx-data
+        emptyDir: {}

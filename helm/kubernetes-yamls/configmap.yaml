@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configmap-demo
+  namespace: deboeck
+  labels:
+    owner: deboeck
+data:
+  demo_name: "kubernetes-traineeship"
+  presenter.names: |
+    "deboeck"
