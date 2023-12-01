@@ -9,3 +9,4 @@ data:
   demo_name: "kubernetes-traineeship"
   presenter.names: |
     "deboeck"
+  environment: "prod"

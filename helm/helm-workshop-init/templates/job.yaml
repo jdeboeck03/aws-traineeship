@@ -1,0 +1,19 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: init-html-page
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    # This is what defines this resource as a hook. Without this line, the
+    # job is considered part of the release.
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-weight": "-5"
+spec:
+  template:
+    spec:
+      containers:
+        - name: init-html-page-job
+          image: busybox
+          command: ["sh",  "-c", 'wget nginx-service.{{ .Release.Namespace }}.svc.cluster.local:80']
+      restartPolicy: Never
+  backoffLimit: 4

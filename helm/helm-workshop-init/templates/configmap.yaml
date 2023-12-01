@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configmap-demo-{{.Values.environmenttype}}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    owner: deboeck
+data:
+  {{ with .Values.configmap.data}}
+  demo_name: "{{ .demo_name}}"
+  presenter_names: |
+  {{ range .presenter_names}}
+    - {{ . }}
+  {{ end }}
+  environment: "{{ .environment }}"
+  {{ end }}

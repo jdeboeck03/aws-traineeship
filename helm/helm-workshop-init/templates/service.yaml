@@ -1,0 +1,16 @@
+{{ if .Values.service.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service
+  namespace: {{ .Release.Namespace }}
+  labels:
+    owner: deboeck
+spec:
+  type: ClusterIP
+  selector:
+    app: nginx
+  ports:
+    - protocol: TCP
+      port: 80
+{{ end }}

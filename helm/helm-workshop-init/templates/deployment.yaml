@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: nginx
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: "nginx:{{ .Values.image.tag }}"
+        resources:
+          limits:
+            memory: {{ .Values.resources.limits.memory }}
+        ports:
+        - containerPort: 80
+        env:
+          - name: DEMO_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-demo-{{ .Values.environmenttype }}
+                key: demo_name
+          - name: ENVIRONMENT
+            valueFrom:
+              configMapKeyRef:
+                name: configmap-demo-{{ .Values.environmenttype }}
+                key: environment
