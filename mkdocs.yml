@@ -18,7 +18,6 @@ theme:
 
 nav:
 - Welcome: index.md
-- Plan: content/plan.md
 - Getting Started: content/getting-started/index.md
 - EC2: content/ec2/index.md
 

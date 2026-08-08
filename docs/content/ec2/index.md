@@ -97,7 +97,7 @@ terraform/ec2/
 └── outputs.tf       # useful values printed after apply
 ```
 
-The full source is in [`terraform/ec2/`](https://github.com/your-repo/terraform/ec2) in this repo.
+The full source is in [`terraform/ec2/`](https://github.com/jdeboeck03/aws-traineeship/tree/main/terraform/ec2) in this repo.
 
 ### Initialise and apply
 

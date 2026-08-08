@@ -29,6 +29,6 @@ directory alongside its docs.
 ## Structure
 
 - `docs/` — notes and documentation per AWS service
-- `docs/content/plan.md` — module plan and scope for the traineeship day
+- `PLAN.md` — module plan and scope for the traineeship day (not published to the docs site)
 - `app/` — Quarkus application (DynamoDB + SQS SDK integration)
 - `terraform/` — Terraform root module (full stack, built up incrementally)
