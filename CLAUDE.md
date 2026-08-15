@@ -26,6 +26,18 @@ My own AWS traineeship, based on the Axxes course structure from Rob's 2026 trai
 resources to create, but write Terraform equivalents here. Each service module has a `terraform/`
 directory alongside its docs.
 
+## Documentation conventions
+
+- Every documented shell command must work when copy-pasted into **both** bash (Linux/macOS) and
+  Windows PowerShell — trainees use both. Use mkdocs content tabs
+  (`=== "Linux / macOS"` / `=== "Windows (PowerShell)"`, enabled via `pymdownx.tabbed` in
+  `mkdocs.yml`) whenever a command needs line continuation, variable assignment, or other
+  shell-specific syntax (bash `\` + `$(...)` vs. PowerShell `` ` `` + `$var = ...`). A single-line
+  command with no shell-specific syntax doesn't need tabs.
+- AMI IDs, and other values that go stale as AWS ships updates, should be looked up dynamically
+  (SSM parameter, CLI query, Terraform data source) rather than hardcoded — see `terraform/ec2` for
+  the pattern.
+
 ## Structure
 
 - `docs/` — notes and documentation per AWS service
