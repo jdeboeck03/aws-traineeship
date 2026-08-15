@@ -18,8 +18,13 @@ relevant `.tf` files.
 | AWS Console access | Done | `getting-started/index.md` |
 | AWS CLI installation & SSO | Done | `getting-started/index.md` |
 | AWS CLI — setting a default profile | Done | `getting-started/index.md` |
+| Tagging convention (Project/Owner/Contact) | Done | `tagging/index.md` |
+| Terraform fundamentals (concepts, workflow, state) | Done | `terraform-fundamentals/index.md` |
 
-The getting-started section is complete and ready to be delivered.
+The getting-started section is complete and ready to be delivered. Tagging and Terraform
+Fundamentals are cross-cutting sections delivered before Module 1 (EC2), same tier as
+getting-started — every later module's Terraform should follow the `default_tags` pattern
+introduced there.
 
 ## Planned modules
 

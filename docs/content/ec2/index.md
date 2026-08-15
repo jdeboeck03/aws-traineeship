@@ -79,14 +79,8 @@ aws ec2 run-instances \
 
 ## Exercise 2 — Provision with Terraform
 
-### Prerequisites
-
-Install Terraform by following the [official instructions](https://developer.hashicorp.com/terraform/install).
-Verify:
-
-```shell
-terraform -version
-```
+See [Terraform Fundamentals](../terraform-fundamentals/index.md) if you haven't installed
+Terraform yet or need a refresher on the core concepts and workflow used below.
 
 ### Project layout
 
@@ -99,6 +93,10 @@ terraform/ec2/
 
 The full source is in [`terraform/ec2/`](https://github.com/jdeboeck03/aws-traineeship/tree/main/terraform/ec2) in this repo.
 
+The provider block sets `default_tags` so every resource this module creates is automatically
+tagged with `Project`, `Owner`, and `Contact` — see [Tagging](../tagging/index.md). This is why
+`owner` and `contact` are required variables below alongside `name`.
+
 ### Initialise and apply
 
 ```shell
@@ -108,10 +106,10 @@ cd terraform/ec2
 terraform init
 
 # Preview what will be created
-terraform plan -var="name=<your-name>"
+terraform plan -var="name=<your-name>" -var="owner=<your-name>.<your-lastname>" -var="contact=<you>@axxes.com"
 
 # Create the resources
-terraform apply -var="name=<your-name>"
+terraform apply -var="name=<your-name>" -var="owner=<your-name>.<your-lastname>" -var="contact=<you>@axxes.com"
 ```
 
 Terraform will print the instance's **public IP** when it finishes.
@@ -127,7 +125,7 @@ ssh -i <your-name>-key.pem ec2-user@<printed-public-ip>
 Always destroy resources when you are done to avoid unnecessary costs:
 
 ```shell
-terraform destroy -var="name=<your-name>"
+terraform destroy -var="name=<your-name>" -var="owner=<your-name>.<your-lastname>" -var="contact=<you>@axxes.com"
 ```
 
 ---

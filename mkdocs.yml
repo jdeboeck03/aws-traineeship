@@ -19,6 +19,8 @@ theme:
 nav:
 - Welcome: index.md
 - Getting Started: content/getting-started/index.md
+- Tagging: content/tagging/index.md
+- Terraform Fundamentals: content/terraform-fundamentals/index.md
 - EC2: content/ec2/index.md
 
 markdown_extensions:

@@ -3,6 +3,16 @@ variable "name" {
   type        = string
 }
 
+variable "owner" {
+  description = "Your identity for the Owner tag, e.g. firstname.lastname."
+  type        = string
+}
+
+variable "contact" {
+  description = "Your email address for the Contact tag."
+  type        = string
+}
+
 variable "region" {
   description = "AWS region to deploy into."
   type        = string

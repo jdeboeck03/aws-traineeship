@@ -18,6 +18,14 @@ terraform {
 provider "aws" {
   region  = var.region
   profile = "traineeship"
+
+  default_tags {
+    tags = {
+      Project = "SDT-Traineeship"
+      Owner   = var.owner
+      Contact = var.contact
+    }
+  }
 }
 
 # Generate an SSH key pair locally and upload the public key to AWS.
