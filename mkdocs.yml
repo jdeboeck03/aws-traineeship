@@ -44,3 +44,5 @@ markdown_extensions:
 - pymdownx.tasklist:
     custom_checkbox: true
 - pymdownx.details
+- pymdownx.tabbed:
+    alternate_style: true

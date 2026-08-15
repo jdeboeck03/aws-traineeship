@@ -10,6 +10,12 @@ A snapshot of an operating system and pre-installed software. Every EC2 instance
 an AMI. AWS publishes official Amazon Linux, Ubuntu, and Windows images; you can also create your
 own.
 
+!!! note "AMI IDs change constantly"
+    AWS ships a new Amazon Linux 2023 build every few weeks, each with a new AMI ID — the exact
+    build number (e.g. `2023.12.20260803.3`) isn't important, only the family ("Amazon Linux
+    2023"). Never hardcode an AMI ID for long-term use; look it up at launch time instead (the
+    console does this for you, the CLI/Terraform examples below show how).
+
 **Instance type**
 Determines the vCPU count, memory, and network bandwidth of the instance.
 `t3.micro` is the smallest general-purpose type and sits within the free tier.
@@ -20,7 +26,9 @@ AWS stores the public key; you keep the private key (`.pem` file). Without it yo
 
 **Security group**
 A stateful firewall attached to an instance. Rules are _allow-only_ — there is no explicit deny.
-By default all inbound traffic is blocked and all outbound traffic is allowed.
+By default all inbound traffic is blocked and all outbound traffic is allowed. Security groups are
+free — there's no cost to creating your own per instance, and doing so keeps your resources
+isolated from everyone else's in this shared account.
 
 **Public IP**
 EC2 instances can be assigned a public IP on launch. By default this IP changes every time the
@@ -44,7 +52,15 @@ stable address.
 6. Under **Network settings** leave the defaults (auto-assign public IP enabled) and add a security
    group rule:
     - Type: SSH, Source: Anywhere (0.0.0.0/0)
-7. Click **Launch instance**.
+7. Expand **Advanced details** and add the three required tags from [Tagging](../tagging/index.md)
+   (`Project`, `Owner`, `Contact`), plus a `Name` tag matching the instance name you picked.
+8. Click **Launch instance**.
+
+!!! warning "The security group doesn't inherit these tags"
+    Tags you set during launch only apply to the instance — the security group the wizard creates
+    for you (named `launch-wizard-N`) comes out **untagged**. After launching, go to
+    **EC2 → Security Groups**, select the one attached to your instance, open its **Tags** tab, and
+    add the same `Project` / `Owner` / `Contact` tags manually.
 
 ### Connect via SSH
 
@@ -65,15 +81,51 @@ ssh -i <your-name>-key.pem ec2-user@<public-ip>
 
 ### Connect via CLI
 
-You can also launch an instance entirely from the CLI:
+You can also launch an instance entirely from the CLI. Look up the current Amazon Linux 2023 AMI
+ID instead of hardcoding one — AWS publishes it under a well-known SSM parameter that always
+points at the current recommended build:
 
-```shell
-aws ec2 run-instances \
-  --image-id ami-089950bc622d39ed8 \
-  --instance-type t3.micro \
-  --key-name <your-name>-key \
-  --region eu-west-1
-```
+=== "Linux / macOS"
+
+    ```shell
+    AMI_ID=$(aws ssm get-parameter \
+      --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 \
+      --region eu-west-1 --query 'Parameter.Value' --output text)
+
+    aws ec2 run-instances \
+      --image-id "$AMI_ID" \
+      --instance-type t3.micro \
+      --key-name <your-name>-key \
+      --region eu-west-1
+    ```
+
+=== "Windows (PowerShell)"
+
+    ```powershell
+    $AmiId = aws ssm get-parameter `
+      --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 `
+      --region eu-west-1 --query "Parameter.Value" --output text
+
+    aws ec2 run-instances `
+      --image-id $AmiId `
+      --instance-type t3.micro `
+      --key-name <your-name>-key `
+      --region eu-west-1
+    ```
+
+!!! note "Don't forget the tags"
+    This command doesn't tag anything. Add the required tags afterwards from the console (or pass
+    `--tag-specifications`) — see [Tagging](../tagging/index.md).
+
+### Clean up
+
+Terminate the instance from the EC2 console (select it → **Instance state** → **Terminate
+instance**) or via `aws ec2 terminate-instances --instance-ids <id>`.
+
+!!! warning "The security group isn't deleted automatically"
+    Unlike Terraform's `destroy` below, terminating an instance launched this way does **not**
+    remove the `launch-wizard-N` security group it created. Delete it separately from
+    **EC2 → Security Groups**, or it will sit around — tagged or not — until someone cleans it up.
 
 ---
 
@@ -95,7 +147,12 @@ The full source is in [`terraform/ec2/`](https://github.com/jdeboeck03/aws-train
 
 The provider block sets `default_tags` so every resource this module creates is automatically
 tagged with `Project`, `Owner`, and `Contact` — see [Tagging](../tagging/index.md). This is why
-`owner` and `contact` are required variables below alongside `name`.
+`owner` and `contact` are required variables below alongside `name`. This includes the security
+group, which also gets a `Name` tag — unlike the console flow above, nothing here ends up
+untagged, and `terraform destroy` removes the instance and its security group together.
+
+The AMI is looked up automatically too, via the same SSM parameter used in the CLI example above —
+`ami_id` only needs to be set if you want to pin a specific build.
 
 ### Initialise and apply
 
@@ -133,8 +190,12 @@ terraform destroy -var="name=<your-name>" -var="owner=<your-name>.<your-lastname
 ## Key takeaways
 
 - EC2 gives you a full virtual machine — full control, but you manage the OS.
-- Security groups are the primary network-level access control mechanism.
+- Security groups are the primary network-level access control mechanism, and they're free to
+  create one per instance — do so rather than sharing one across trainees.
 - Key pairs are the only way into a Linux instance; keep your `.pem` file secure.
-- Terraform lets you define infrastructure as code so it is repeatable and reviewable.
+- Tags don't propagate automatically between related resources — a security group created
+  alongside a tagged instance still needs its own tags.
+- Terraform lets you define infrastructure as code so it is repeatable and reviewable, and cleans
+  up everything it created — including security groups — in one `destroy`.
 - In later modules we will move to higher-level abstractions (ECS Fargate) where AWS manages the
   underlying VM for you.

@@ -26,7 +26,7 @@ variable "instance_type" {
 }
 
 variable "ami_id" {
-  description = "Amazon Machine Image ID. Defaults to Amazon Linux 2023 in eu-west-1."
+  description = "Amazon Machine Image ID. Defaults to the latest Amazon Linux 2023 AMI for the target region — override only if you need a specific build."
   type        = string
-  default     = "ami-089950bc622d39ed8"
+  default     = null
 }

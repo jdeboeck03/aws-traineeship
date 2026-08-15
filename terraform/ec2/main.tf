@@ -28,6 +28,18 @@ provider "aws" {
   }
 }
 
+# AWS publishes the current recommended Amazon Linux 2023 build under this SSM parameter, so we
+# never have to hardcode an AMI ID that goes stale as new builds ship every few weeks.
+data "aws_ssm_parameter" "al2023_ami" {
+  name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
+}
+
+locals {
+  # SSM parameter values are marked sensitive by default even though this one (a public AMI ID)
+  # isn't a secret — unmark it so it's still visible in plan/apply output.
+  ami_id = coalesce(var.ami_id, nonsensitive(data.aws_ssm_parameter.al2023_ami.value))
+}
+
 # Generate an SSH key pair locally and upload the public key to AWS.
 resource "tls_private_key" "this" {
   algorithm = "RSA"
@@ -65,10 +77,14 @@ resource "aws_security_group" "this" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  tags = {
+    Name = "${var.name}-sg"
+  }
 }
 
 resource "aws_instance" "this" {
-  ami                         = var.ami_id
+  ami                         = local.ami_id
   instance_type               = var.instance_type
   key_name                    = aws_key_pair.this.key_name
   vpc_security_group_ids      = [aws_security_group.this.id]
