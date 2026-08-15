@@ -11,7 +11,7 @@ My own AWS traineeship, based on the Axxes course structure from Rob's 2026 trai
 - SSO Start URL: `https://axxes.awsapps.com/start/#/`
 - SSO Region: `eu-west-1`
 - Testing account: `sandbox-2024` (ID: `211125550721`)
-- Production account: `traineeship-2026` (not yet created — update this when provisioned)
+- Production account: `traineeship-2026` (ID: `313160010160`)
 - Default region: `eu-west-1`
 - Identity provider: Azure AD — trainees log in with their own AD users
 - Model: all trainees share one AWS account
