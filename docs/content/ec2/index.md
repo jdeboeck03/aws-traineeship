@@ -81,27 +81,59 @@ ssh -i <your-name>-key.pem ec2-user@<public-ip>
 
 ### Connect via CLI
 
-You can also launch an instance entirely from the CLI. Look up the current Amazon Linux 2023 AMI
-ID instead of hardcoding one — AWS publishes it under a well-known SSM parameter that always
-points at the current recommended build:
+You can also launch an instance entirely from the CLI. Unlike the console wizard, nothing is
+created for you automatically — you create the security group, open port 22 on it, look up the
+AMI, and launch the instance yourself, in that order. This is exactly what the Terraform module in
+Exercise 2 does under the hood.
+
+!!! danger "Don't skip the security group"
+    `aws ec2 run-instances` without `--security-group-ids` attaches the instance to the VPC's
+    **default** security group, which allows no inbound traffic at all — including SSH. You'd get
+    an instance you can't connect to. Create and attach your own group as shown below.
 
 === "Linux / macOS"
 
     ```shell
+    # Security group, scoped to your own instance, in the default VPC
+    VPC_ID=$(aws ec2 describe-vpcs --filters "Name=isDefault,Values=true" \
+      --region eu-west-1 --query 'Vpcs[0].VpcId' --output text)
+
+    SG_ID=$(aws ec2 create-security-group \
+      --group-name <your-name>-sg --description "Allow SSH inbound" \
+      --vpc-id "$VPC_ID" --region eu-west-1 --query 'GroupId' --output text)
+
+    aws ec2 authorize-security-group-ingress \
+      --group-id "$SG_ID" --protocol tcp --port 22 --cidr 0.0.0.0/0 \
+      --region eu-west-1
+
+    # Current Amazon Linux 2023 AMI
     AMI_ID=$(aws ssm get-parameter \
       --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 \
       --region eu-west-1 --query 'Parameter.Value' --output text)
 
+    # Launch, referencing the security group above
     aws ec2 run-instances \
       --image-id "$AMI_ID" \
       --instance-type t3.micro \
       --key-name <your-name>-key \
+      --security-group-ids "$SG_ID" \
       --region eu-west-1
     ```
 
 === "Windows (PowerShell)"
 
     ```powershell
+    $VpcId = aws ec2 describe-vpcs --filters "Name=isDefault,Values=true" `
+      --region eu-west-1 --query "Vpcs[0].VpcId" --output text
+
+    $SgId = aws ec2 create-security-group `
+      --group-name <your-name>-sg --description "Allow SSH inbound" `
+      --vpc-id $VpcId --region eu-west-1 --query "GroupId" --output text
+
+    aws ec2 authorize-security-group-ingress `
+      --group-id $SgId --protocol tcp --port 22 --cidr 0.0.0.0/0 `
+      --region eu-west-1
+
     $AmiId = aws ssm get-parameter `
       --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 `
       --region eu-west-1 --query "Parameter.Value" --output text
@@ -110,12 +142,14 @@ points at the current recommended build:
       --image-id $AmiId `
       --instance-type t3.micro `
       --key-name <your-name>-key `
+      --security-group-ids $SgId `
       --region eu-west-1
     ```
 
 !!! note "Don't forget the tags"
-    This command doesn't tag anything. Add the required tags afterwards from the console (or pass
-    `--tag-specifications`) — see [Tagging](../tagging/index.md).
+    Neither the instance nor the security group you just created are tagged yet. Add the required
+    tags afterwards from the console, or pass `--tag-specifications` on `create-security-group` and
+    `run-instances` to tag them at creation time — see [Tagging](../tagging/index.md).
 
 ### Clean up
 
@@ -123,9 +157,14 @@ Terminate the instance from the EC2 console (select it → **Instance state** �
 instance**) or via `aws ec2 terminate-instances --instance-ids <id>`.
 
 !!! warning "The security group isn't deleted automatically"
-    Unlike Terraform's `destroy` below, terminating an instance launched this way does **not**
-    remove the `launch-wizard-N` security group it created. Delete it separately from
-    **EC2 → Security Groups**, or it will sit around — tagged or not — until someone cleans it up.
+    Unlike Terraform's `destroy` below, terminating an instance launched manually does **not**
+    remove its security group — neither the console wizard's `launch-wizard-N` group nor the
+    `<your-name>-sg` group created via the CLI above. Once the instance has finished terminating,
+    delete it separately:
+    ```shell
+    aws ec2 delete-security-group --group-id <sg-id> --region eu-west-1
+    ```
+    or from **EC2 → Security Groups** in the console.
 
 ---
 
