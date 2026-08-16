@@ -29,3 +29,15 @@ variable "instance_type" {
   type        = string
   default     = "t3.micro"
 }
+
+variable "subnet_id" {
+  description = "Subnet to launch the instance in. If null, AWS picks a subnet in the default VPC."
+  type        = string
+  default     = null
+}
+
+variable "security_group_ids" {
+  description = "Security group IDs to attach. If empty, a new SSH-allowing group is created in the default VPC."
+  type        = list(string)
+  default     = []
+}

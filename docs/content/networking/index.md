@@ -80,15 +80,17 @@ It should:
 - Create an internet gateway and attach it to the VPC
 - Create a route table with a default route (`0.0.0.0/0`) to the internet gateway, and associate
   it with the public subnet
+- Create a security group inside the VPC that allows inbound SSH (port 22)
 - Tag every resource with `Project`, `Owner`, `Contact` (via `default_tags`) plus a `Name` tag
 - Take `name`, `owner`, `contact`, and `project` as required variables
-- Output the VPC ID and the public subnet ID — later modules will reference these
+- Output the VPC ID, the public subnet ID, and the SSH security group ID — Exercise 2 will use all three
 
 ??? question "Hints"
     - All resources in this module come from the `aws` provider — no additional providers needed.
-    - Create the VPC first; the subnet, IGW, and route table all need `vpc_id = aws_vpc.this.id`.
-    - Look up `aws_vpc`, `aws_subnet`, `aws_internet_gateway`, `aws_route_table`, and
-      `aws_route_table_association` in the
+    - Create the VPC first; the subnet, IGW, route table, and security group all need
+      `vpc_id = aws_vpc.this.id`.
+    - Look up `aws_vpc`, `aws_subnet`, `aws_internet_gateway`, `aws_route_table`,
+      `aws_route_table_association`, and `aws_security_group` in the
       [Terraform Registry](https://registry.terraform.io/providers/hashicorp/aws/latest/docs).
     - The IGW needs to be *attached* to the VPC — check which resource handles attachment vs. which
       just creates the gateway.
@@ -175,6 +177,31 @@ It should:
       subnet_id      = aws_subnet.public.id
       route_table_id = aws_route_table.public.id
     }
+
+    resource "aws_security_group" "ssh" {
+      name        = "${var.name}-ssh-sg"
+      description = "Allow SSH inbound"
+      vpc_id      = aws_vpc.this.id
+
+      ingress {
+        description = "SSH"
+        from_port   = 22
+        to_port     = 22
+        protocol    = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+      }
+
+      egress {
+        from_port   = 0
+        to_port     = 0
+        protocol    = "-1"
+        cidr_blocks = ["0.0.0.0/0"]
+      }
+
+      tags = {
+        Name = "${var.name}-ssh-sg"
+      }
+    }
     ```
 
     ```hcl title="variables.tf"
@@ -227,6 +254,11 @@ It should:
       description = "ID of the public subnet."
       value       = aws_subnet.public.id
     }
+
+    output "ssh_security_group_id" {
+      description = "ID of the SSH security group (allows inbound port 22)."
+      value       = aws_security_group.ssh.id
+    }
     ```
 
 ### Set your variables
@@ -251,8 +283,7 @@ terraform plan
 terraform apply
 ```
 
-Terraform will print the VPC ID and subnet ID after apply — note them down, later modules will ask
-for them.
+Terraform will print the VPC ID, subnet ID, and security group ID after apply.
 
 ### Clean up
 
@@ -260,8 +291,191 @@ for them.
 terraform destroy
 ```
 
-Terraform removes all five resources (VPC, subnet, IGW, route table, association) in the correct
-dependency order automatically.
+Terraform removes all resources in the correct dependency order automatically.
+
+---
+
+## Exercise 2 — Compose VPC and EC2 with Terraform modules
+
+See [Calling modules](../terraform-fundamentals/index.md#calling-modules) in Terraform Fundamentals
+if you haven't read it yet.
+
+So far the VPC and EC2 modules are independent: each creates its own resources in isolation. In
+practice, an EC2 instance belongs inside a VPC — launched into one of its subnets and protected by
+one of its security groups. Terraform's `module` block lets you wire the two together: the VPC
+module's outputs become the EC2 module's inputs.
+
+### Your task
+
+Build a root module in `terraform/full-stack/` that composes the VPC and EC2 modules. It should:
+
+- Call the `vpc` module and the `ec2` module from their existing directories
+- Pass the VPC's public subnet ID into the EC2 module's `subnet_id`
+- Pass the VPC's SSH security group ID into the EC2 module's `security_group_ids` — the EC2
+  module should not create its own security group in this composition
+- Take the same four required variables (`name`, `owner`, `contact`, `project`)
+- Output the VPC ID, subnet ID, instance ID, public IP, and SSH command
+
+??? question "Hints"
+    - A `module` block needs a `source` argument pointing at the directory of the module to call,
+      e.g. `source = "../vpc"`. Run `terraform init` after adding or changing a `module` block.
+    - Pass variables to child modules as arguments inside the `module` block, just like resource
+      arguments.
+    - Reference a child module's output as `module.<name>.<output>` — e.g.
+      `module.vpc.public_subnet_id`.
+    - The root module needs its own `terraform {}` and `provider "aws" {}` blocks — child modules
+      inherit the provider automatically, so don't duplicate it inside `vpc/` or `ec2/`.
+    - The EC2 module skips creating its own security group when `security_group_ids` is non-empty —
+      pass the VPC's SSH group and the EC2 module handles the rest.
+    - To surface EC2 outputs from the root module, forward them: `value = module.ec2.public_ip`.
+
+??? example "Show solution"
+    ```
+    terraform/full-stack/
+    ├── main.tf
+    ├── variables.tf
+    └── outputs.tf
+    ```
+
+    ```hcl title="main.tf"
+    terraform {
+      required_providers {
+        aws = {
+          source  = "hashicorp/aws"
+          version = "~> 5.0"
+        }
+        tls = {
+          source  = "hashicorp/tls"
+          version = "~> 4.0"
+        }
+        local = {
+          source  = "hashicorp/local"
+          version = "~> 2.0"
+        }
+      }
+    }
+
+    provider "aws" {
+      region  = var.region
+      profile = "traineeship"
+
+      default_tags {
+        tags = {
+          Project = var.project
+          Owner   = var.owner
+          Contact = var.contact
+        }
+      }
+    }
+
+    module "vpc" {
+      source  = "../vpc"
+      name    = var.name
+      owner   = var.owner
+      contact = var.contact
+      project = var.project
+      region  = var.region
+    }
+
+    module "ec2" {
+      source             = "../ec2"
+      name               = var.name
+      owner              = var.owner
+      contact            = var.contact
+      project            = var.project
+      region             = var.region
+      subnet_id          = module.vpc.public_subnet_id
+      security_group_ids = [module.vpc.ssh_security_group_id]
+    }
+    ```
+
+    ```hcl title="variables.tf"
+    variable "name" {
+      description = "Unique name used as a prefix for all resource Name tags."
+      type        = string
+    }
+
+    variable "owner" {
+      description = "Your identity for the Owner tag, e.g. firstname.lastname."
+      type        = string
+    }
+
+    variable "contact" {
+      description = "Your email address for the Contact tag."
+      type        = string
+    }
+
+    variable "project" {
+      description = "Project you are working on."
+      type        = string
+    }
+
+    variable "region" {
+      description = "AWS region to deploy into."
+      type        = string
+      default     = "eu-west-1"
+    }
+    ```
+
+    ```hcl title="outputs.tf"
+    output "vpc_id" {
+      description = "ID of the VPC."
+      value       = module.vpc.vpc_id
+    }
+
+    output "public_subnet_id" {
+      description = "ID of the public subnet."
+      value       = module.vpc.public_subnet_id
+    }
+
+    output "instance_id" {
+      description = "EC2 instance ID."
+      value       = module.ec2.instance_id
+    }
+
+    output "public_ip" {
+      description = "Public IP address of the EC2 instance."
+      value       = module.ec2.public_ip
+    }
+
+    output "ssh_command" {
+      description = "Ready-to-run SSH command."
+      value       = module.ec2.ssh_command
+    }
+    ```
+
+### Set your variables
+
+```hcl
+# terraform/full-stack/terraform.tfvars — not committed
+name    = "<your-name>"
+owner   = "<your-name>.<your-lastname>"
+contact = "<you>@axxes.com"
+project = "SDT-Traineeship"
+```
+
+### Initialise and apply
+
+```shell
+cd terraform/full-stack
+
+terraform init
+terraform plan
+terraform apply
+```
+
+`terraform init` downloads providers and registers the child modules. The plan will show resources
+from both modules — VPC networking first, then the EC2 instance that depends on it. After apply,
+the SSH command is printed directly; copy-paste it to connect.
+
+### Clean up
+
+```shell
+terraform destroy
+```
+
+Terraform works out the dependency order automatically — the EC2 instance is destroyed before the
+VPC resources it depends on.
 
 ---
 
@@ -274,6 +488,6 @@ dependency order automatically.
   Three separate resources in Terraform, all required.
 - DNS hostnames on the VPC and `map_public_ip_on_launch` on the subnet together give instances a
   reachable public address — either one missing and you can't connect.
-- `terraform destroy` removes everything in dependency order; the manual cleanup order (association
-  → route table → IGW → subnet → VPC) is what Terraform figures out for you.
-- The VPC ID and subnet ID output here are the inputs the ECS module will consume later.
+- Module composition wires outputs of one module directly into inputs of another — no copy-pasting
+  of IDs, no hardcoding, and `terraform destroy` in the root cleans up everything in order.
+- The VPC ID and subnet ID output here are the inputs ECS will consume in a later module.

@@ -52,8 +52,9 @@ resource "local_sensitive_file" "private_key" {
   file_permission = "0400"
 }
 
-# Security group: allow SSH inbound, all outbound.
+# Only create a security group when none are passed in — allows standalone use without a VPC module.
 resource "aws_security_group" "this" {
+  count       = length(var.security_group_ids) == 0 ? 1 : 0
   name        = "${var.name}-sg"
   description = "Allow SSH inbound"
 
@@ -83,7 +84,8 @@ resource "aws_instance" "this" {
   ami                         = nonsensitive(data.aws_ssm_parameter.al2023_ami.value)
   instance_type               = var.instance_type
   key_name                    = aws_key_pair.this.key_name
-  vpc_security_group_ids      = [aws_security_group.this.id]
+  subnet_id                   = var.subnet_id
+  vpc_security_group_ids      = length(var.security_group_ids) > 0 ? var.security_group_ids : [aws_security_group.this[0].id]
   associate_public_ip_address = true
 
   tags = {

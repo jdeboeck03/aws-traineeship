@@ -161,6 +161,50 @@ contact = "<you>@axxes.com"
 project = "SDT-Traineeship"
 ```
 
+## Calling modules
+
+As the infrastructure grows, you'll want to compose smaller, focused modules into a larger whole
+rather than putting everything in one `main.tf`. Terraform's `module` block calls another module
+and passes variables to it — the called module's outputs are then available to wire into other
+modules or use in the root module itself.
+
+```hcl
+module "vpc" {
+  source = "../vpc"       # path to the module directory
+
+  name    = var.name
+  owner   = var.owner
+  contact = var.contact
+  project = var.project
+}
+
+module "ec2" {
+  source = "../ec2"
+
+  name               = var.name
+  owner              = var.owner
+  contact            = var.contact
+  project            = var.project
+  subnet_id          = module.vpc.public_subnet_id      # vpc output → ec2 input
+  security_group_ids = [module.vpc.ssh_security_group_id]
+}
+```
+
+A few rules to know:
+
+- **`source`** is the path to the module — `../vpc` means "the `vpc/` directory one level up".
+  After adding or changing a `module` block, run `terraform init` again to register it.
+- **Module outputs** are referenced as `module.<name>.<output>` — e.g.
+  `module.vpc.public_subnet_id`.
+- **The provider is declared once** in the root module (`full-stack/main.tf`); child modules
+  inherit it automatically — don't add a `provider` block inside `vpc/` or `ec2/` when they're
+  called as child modules. (They do need one for standalone use, which is fine — Terraform ignores
+  it when the module is called from a root.)
+- **Each module keeps its own state** for the resources it owns. `terraform destroy` in the root
+  module tears everything down in the right dependency order.
+
+The Networking module's Exercise 2 walks through building exactly this composition.
+
 ## Tagging
 
 Every provider block in this repo also sets `default_tags` so that everything you create is
@@ -178,3 +222,5 @@ convention and why it's structured that way.
 - The [Terraform Registry](https://registry.terraform.io/providers/hashicorp/aws/latest/docs) is
   the reference for every resource and data source argument — search for the type name when you
   need to know what a resource accepts or exports.
+- `module` blocks compose smaller modules into a larger root module; outputs from one module wire
+  directly into inputs of another via `module.<name>.<output>`.
