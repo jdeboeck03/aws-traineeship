@@ -55,6 +55,13 @@ These rules are the "why"; the template is the copy-paste starting point.
   manual key pair and Exercise 2's Terraform key pair both named `<your-name>-key`), flag the
   collision risk and add a troubleshooting note with the exact error text for when cleanup is
   skipped.
+- **Manual exercise: EC2 only.** EC2 has an explicit Exercise 1 (console + CLI) because launching
+  an instance manually first makes AMIs, key pairs, and security groups concrete. From VPC onwards,
+  modules skip the manual exercise and go straight to Terraform — infrastructure wiring resources
+  (subnets, route tables, IGWs, IAM roles, ...) don't build meaningful intuition from manual
+  creation, and the cleanup steps multiply the risk of leftover resources. Replace Exercise 1 with
+  an `!!! info "No manual exercise for this module"` callout explaining the rationale (see
+  `docs/content/networking/index.md` for the pattern).
 - **Terraform exercises are hints-first, not copy-paste.** State the task and requirements, list
   hints under a collapsed `??? question "Hints"` block, and put the full working module under a
   collapsed `??? example "Show solution"` block (via `pymdownx.details`, already enabled in

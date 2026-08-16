@@ -1,11 +1,28 @@
 # Module Doc Template
 
 Starting skeleton for `docs/content/<service>/index.md` when writing up a new AWS service module
-(VPC, S3, IAM, DynamoDB, SQS+SNS, Lambda, CloudWatch, ...). Established while building out the EC2
+(S3, IAM, DynamoDB, SQS+SNS, Lambda, CloudWatch, ...). Established while building out the EC2
 module — see `CLAUDE.md` → Documentation conventions for the rules behind each piece and why they
 exist. Copy the structure below and fill in the blanks; drop sections that genuinely don't apply to
 the service (e.g. a fully serverless service may have no "Connect via CLI"-equivalent), but don't
-drop the tagging, cleanup, or hints/solution structure without a specific reason.
+drop the hints/solution structure without a specific reason.
+
+**Manual exercise: EC2 only.** EC2 has an explicit Exercise 1 (console + CLI) because launching an
+instance manually first makes AMIs, key pairs, and security groups concrete. From VPC onwards,
+modules skip the manual exercise and go straight to Terraform — infrastructure wiring resources
+(subnets, route tables, IAM roles, ...) don't build intuition from manual creation, and the cleanup
+steps multiply the risk of leftover resources. Add the following callout instead of an Exercise 1:
+
+```shell
+!!! info "No manual exercise for this module"
+    From VPC onwards, modules go straight to Terraform. <Service> resources are infrastructure
+    wiring — creating them by hand doesn't build intuition beyond what the concepts section covers,
+    and manual cleanup is error-prone. Terraform also produces outputs that later modules consume
+    directly.
+
+    EC2 is the exception: launching an instance manually first makes AMIs, key pairs, and security
+    groups concrete before Terraform abstracts them away.
+```
 
 ---
 
@@ -24,29 +41,16 @@ commonly misunderstood — see the "AMI IDs change constantly" note in ec2/index
 
 ---
 
-## Exercise 1 — <Verb> manually
+!!! info "No manual exercise for this module"
+    From VPC onwards, modules go straight to Terraform. <Service> resources are infrastructure
+    wiring — creating them by hand doesn't build intuition beyond what the concepts section covers,
+    and manual cleanup is error-prone. Terraform also produces outputs that later modules consume
+    directly.
 
-<Numbered console steps. Include an explicit tagging step (Project/Owner/Contact + Name) — don't
-assume it happens automatically. If the console flow creates any secondary/auxiliary resource (a
-security group, a role, a bucket policy, ...), check whether it inherits tags from the "main"
-resource — it usually doesn't — and give it its own step plus a `!!! warning` callout.>
+    EC2 is the exception: launching an instance manually first makes AMIs, key pairs, and security
+    groups concrete before Terraform abstracts them away.
 
-### <Do it via CLI>  <!-- e.g. "Connect via CLI" -->
-
-<Full working CLI command(s). Wrap in `=== "Linux / macOS"` / `=== "Windows (PowerShell)"` tabs
-(`pymdownx.tabbed`) if there's any shell-specific syntax — line continuation, variable assignment,
-quoting. Look up anything that drifts over time (AMI IDs, latest image tags, current-generation
-instance/resource types) dynamically; never hardcode an identifier that will go stale.>
-
-### Clean up
-
-<Tear-down steps for EVERYTHING created in this exercise, including secondary resources not deleted
-automatically alongside the "main" one (e.g. a security group surviving instance termination). Give
-the actual CLI command, not just "delete it in the console.">
-
----
-
-## Exercise 2 — Provision with Terraform
+## Exercise — Provision with Terraform
 
 See [Terraform Fundamentals](../terraform-fundamentals/index.md) if needed.
 
