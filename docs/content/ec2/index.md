@@ -228,8 +228,6 @@ It should:
     gets a `Name` tag — nothing ends up untagged, and `terraform destroy` removes the instance and
     its security group together.
 
-    Full source: [`terraform/ec2/`](https://github.com/jdeboeck03/aws-traineeship/tree/main/terraform/ec2)
-
     ```hcl title="main.tf"
     terraform {
       required_providers {

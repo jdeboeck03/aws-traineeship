@@ -33,6 +33,10 @@ Services are picked from Rob's traineeship for their developer relevance — dat
 (Glue, Athena, EMR, SageMaker, QuickSight) are omitted as they are less relevant to the
 typical backend developer audience.
 
+When writing up the next module's docs, start from `MODULE_TEMPLATE.md` — the structure, tagging,
+cleanup, cross-shell, and hints/solution conventions it captures came out of building EC2 and apply
+to every module below.
+
 ---
 
 ### 1. EC2 — Virtual Machines
