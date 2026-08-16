@@ -22,6 +22,7 @@ nav:
 - Tagging: content/tagging/index.md
 - Terraform Fundamentals: content/terraform-fundamentals/index.md
 - EC2: content/ec2/index.md
+- Networking: content/networking/index.md
 
 markdown_extensions:
 - admonition

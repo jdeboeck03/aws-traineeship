@@ -82,6 +82,28 @@ knows what to change or destroy on the next run. This file can contain sensitive
 specific to your own local run, so it's git-ignored in this repo (see `.gitignore`) — never commit
 it, and never hand-edit it.
 
+## Terraform Registry
+
+Every provider and its resources are documented on the
+[Terraform Registry](https://registry.terraform.io). For the AWS provider, the docs live at:
+
+```
+registry.terraform.io/providers/hashicorp/aws/latest/docs
+```
+
+The left-hand sidebar splits into **Resources** (things Terraform creates and manages) and **Data
+Sources** (things Terraform reads from AWS without creating). When you need to know what arguments
+a resource accepts or what attributes it exposes, this is the first place to look.
+
+For example, searching for `aws_instance` takes you straight to the EC2 instance resource page,
+which lists every argument (`ami`, `instance_type`, `vpc_security_group_ids`, ...) with its type,
+whether it's required or optional, and what the resource exports after creation (`public_ip`,
+`id`, ...).
+
+!!! tip
+    The quickest path is usually a web search for `terraform aws_instance` or whichever resource
+    type you need — the Registry page is almost always the top result.
+
 ## Project layout
 
 Every module in this repo follows the same layout, under `terraform/<module>/`:
@@ -153,3 +175,6 @@ convention and why it's structured that way.
 - The state file tracks what exists; never commit or hand-edit it.
 - Workflow is always `init` → `plan` → `apply`, and `destroy` when you're done.
 - A git-ignored `terraform.tfvars` per module beats repeating `-var=...` flags on every command.
+- The [Terraform Registry](https://registry.terraform.io/providers/hashicorp/aws/latest/docs) is
+  the reference for every resource and data source argument — search for the type name when you
+  need to know what a resource accepts or exports.
