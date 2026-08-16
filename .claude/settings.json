@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/scan-git-secrets.sh",
+            "command": "bash \"$(git rev-parse --show-toplevel)/.claude/hooks/scan-git-secrets.sh\"",
             "timeout": 30,
             "statusMessage": "Scanning for secrets before git commit/push..."
           }
