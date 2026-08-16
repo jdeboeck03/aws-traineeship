@@ -21,7 +21,7 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project = "SDT-Traineeship"
+      Project = var.project
       Owner   = var.owner
       Contact = var.contact
     }

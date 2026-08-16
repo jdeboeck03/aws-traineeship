@@ -166,6 +166,15 @@ instance**) or via `aws ec2 terminate-instances --instance-ids <id>`.
     ```
     or from **EC2 → Security Groups** in the console.
 
+!!! warning "Neither is the key pair"
+    Delete the key pair you created too, once you're done with this exercise:
+    ```shell
+    aws ec2 delete-key-pair --key-name <your-name>-key --region eu-west-1
+    ```
+    or from **EC2 → Key Pairs** in the console. If you skip this and move on to Exercise 2
+    (Terraform) with the same `<your-name>`, `terraform apply` will fail — it tries to create a key
+    pair with that same name.
+
 ---
 
 ## Exercise 2 — Provision with Terraform
@@ -186,12 +195,27 @@ The full source is in [`terraform/ec2/`](https://github.com/jdeboeck03/aws-train
 
 The provider block sets `default_tags` so every resource this module creates is automatically
 tagged with `Project`, `Owner`, and `Contact` — see [Tagging](../tagging/index.md). This is why
-`owner` and `contact` are required variables below alongside `name`. This includes the security
-group, which also gets a `Name` tag — unlike the console flow above, nothing here ends up
+`owner`, `contact`, and `project` are required variables below alongside `name`. This includes the
+security group, which also gets a `Name` tag — unlike the console flow above, nothing here ends up
 untagged, and `terraform destroy` removes the instance and its security group together.
 
 The AMI is looked up automatically too, via the same SSM parameter used in the CLI example above —
 `ami_id` only needs to be set if you want to pin a specific build.
+
+### Set your variables
+
+`name`, `owner`, `contact`, and `project` are all required, with no defaults. Rather than repeating
+four `-var=...` flags on every command, create a `terraform.tfvars` file in `terraform/ec2/` —
+Terraform loads it automatically, and it's already git-ignored so nothing personal gets committed
+(see [Terraform Fundamentals](../terraform-fundamentals/index.md#providing-variable-values)):
+
+```hcl
+# terraform/ec2/terraform.tfvars — not committed
+name    = "<your-name>"
+owner   = "<your-name>.<your-lastname>"
+contact = "<you>@axxes.com"
+project = "SDT-Traineeship"
+```
 
 ### Initialise and apply
 
@@ -202,11 +226,22 @@ cd terraform/ec2
 terraform init
 
 # Preview what will be created
-terraform plan -var="name=<your-name>" -var="owner=<your-name>.<your-lastname>" -var="contact=<you>@axxes.com"
+terraform plan
 
 # Create the resources
-terraform apply -var="name=<your-name>" -var="owner=<your-name>.<your-lastname>" -var="contact=<you>@axxes.com"
+terraform apply
 ```
+
+!!! failure "Apply fails with a duplicate key pair error"
+    ```
+    Error: creating EC2 Key Pair (<your-name>-key): InvalidKeyPair.Duplicate: The keypair already exists
+    ```
+    This happens if you did Exercise 1 first and didn't delete its key pair — Terraform tries to
+    create one with the same name (`<your-name>-key`) and AWS rejects the duplicate. Delete the
+    leftover key pair, then re-run `terraform apply`:
+    ```shell
+    aws ec2 delete-key-pair --key-name <your-name>-key --region eu-west-1
+    ```
 
 Terraform will print the instance's **public IP** when it finishes.
 
@@ -221,7 +256,7 @@ ssh -i <your-name>-key.pem ec2-user@<printed-public-ip>
 Always destroy resources when you are done to avoid unnecessary costs:
 
 ```shell
-terraform destroy -var="name=<your-name>" -var="owner=<your-name>.<your-lastname>" -var="contact=<you>@axxes.com"
+terraform destroy
 ```
 
 ---

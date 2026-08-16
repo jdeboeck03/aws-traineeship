@@ -170,6 +170,12 @@ All services → CloudWatch Logs + Metrics
 **Deliverable:** A single Terraform root module (`terraform/`) that provisions the entire stack.
 The Quarkus app in `app/` integrates with DynamoDB and SQS via the AWS SDK.
 
+**Remote state:** This is also where we introduce an S3 + DynamoDB remote backend (state bucket +
+lock table), once S3 and DynamoDB have already been taught as services in their own right. Not
+introduced earlier — every prior module's state is personal, short-lived, and destroyed same-day,
+so there's no real collaboration/locking problem to motivate it yet, and a shared backend needs
+bootstrapping outside the config it locks plus a per-trainee state key to avoid collisions.
+
 ---
 
 ## Explicitly out of scope

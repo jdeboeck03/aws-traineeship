@@ -115,6 +115,30 @@ Run `init` once per module (or whenever providers change), and always `plan` bef
 know what's about to happen. **Always `destroy` when you're done with an exercise** — this is a
 shared account, and unused resources cost money.
 
+## Providing variable values
+
+`-var="key=value"` works, but it gets unwieldy once a module has several required variables — as
+`terraform/ec2` now does (`name`, `owner`, `contact`, `project`). Terraform accepts values from a
+few places, in increasing order of precedence:
+
+1. A `terraform.tfvars` file in the module directory — loaded **automatically** by every `plan`,
+   `apply`, and `destroy`. Any `*.auto.tfvars` file is loaded the same way. No flag needed.
+2. `-var-file=<name>.tfvars` — for any other filename; Terraform only reads it if you point at it.
+3. `TF_VAR_<name>` environment variables.
+4. `-var="key=value"` flags — highest precedence, good for one-off overrides.
+
+The practical pattern for this repo: create your own `terraform.tfvars` once per module (it's
+git-ignored — see `.gitignore` — so nothing personal gets committed), then run bare `terraform
+plan` / `apply` / `destroy` from then on:
+
+```hcl
+# terraform/<module>/terraform.tfvars — not committed
+name    = "<your-name>"
+owner   = "<your-name>.<your-lastname>"
+contact = "<you>@axxes.com"
+project = "SDT-Traineeship"
+```
+
 ## Tagging
 
 Every provider block in this repo also sets `default_tags` so that everything you create is
@@ -128,3 +152,4 @@ convention and why it's structured that way.
   module.
 - The state file tracks what exists; never commit or hand-edit it.
 - Workflow is always `init` → `plan` → `apply`, and `destroy` when you're done.
+- A git-ignored `terraform.tfvars` per module beats repeating `-var=...` flags on every command.

@@ -13,6 +13,11 @@ variable "contact" {
   type        = string
 }
 
+variable "project" {
+  description = "Project you are working on"
+  type        = string
+}
+
 variable "region" {
   description = "AWS region to deploy into."
   type        = string
