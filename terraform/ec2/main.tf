@@ -34,12 +34,6 @@ data "aws_ssm_parameter" "al2023_ami" {
   name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
 }
 
-locals {
-  # SSM parameter values are marked sensitive by default even though this one (a public AMI ID)
-  # isn't a secret — unmark it so it's still visible in plan/apply output.
-  ami_id = coalesce(var.ami_id, nonsensitive(data.aws_ssm_parameter.al2023_ami.value))
-}
-
 # Generate an SSH key pair locally and upload the public key to AWS.
 resource "tls_private_key" "this" {
   algorithm = "RSA"
@@ -84,7 +78,9 @@ resource "aws_security_group" "this" {
 }
 
 resource "aws_instance" "this" {
-  ami                         = local.ami_id
+  # SSM parameter values are marked sensitive by default — nonsensitive() unmarks it so the AMI ID
+  # is still visible in plan/apply output.
+  ami                         = nonsensitive(data.aws_ssm_parameter.al2023_ami.value)
   instance_type               = var.instance_type
   key_name                    = aws_key_pair.this.key_name
   vpc_security_group_ids      = [aws_security_group.this.id]

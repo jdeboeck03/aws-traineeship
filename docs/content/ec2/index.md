@@ -210,8 +210,8 @@ It should:
     - Don't hardcode an AMI ID — it goes stale within weeks. AWS publishes the current Amazon
       Linux 2023 build under a public SSM parameter
       (`/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64`). There's a data
-      source for reading SSM parameters — and its `value` comes back marked sensitive by default
-      even though this one isn't a secret, so you'll need a way to unmark it.
+      source for reading SSM parameters — its `value` comes back marked sensitive by default even
+      though this one isn't a secret. You'll need a way to unmark it before passing it to `ami`.
     - Use the same `profile = "traineeship"` convention from
       [Getting Started](../getting-started/index.md) in your provider block.
 
@@ -265,12 +265,6 @@ It should:
       name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
     }
 
-    locals {
-      # SSM parameter values are marked sensitive by default even though this one (a public AMI ID)
-      # isn't a secret — unmark it so it's still visible in plan/apply output.
-      ami_id = coalesce(var.ami_id, nonsensitive(data.aws_ssm_parameter.al2023_ami.value))
-    }
-
     # Generate an SSH key pair locally and upload the public key to AWS.
     resource "tls_private_key" "this" {
       algorithm = "RSA"
@@ -315,7 +309,9 @@ It should:
     }
 
     resource "aws_instance" "this" {
-      ami                         = local.ami_id
+      # SSM parameter values are marked sensitive by default — nonsensitive() unmarks it so the AMI ID
+      # is still visible in plan/apply output.
+      ami                         = nonsensitive(data.aws_ssm_parameter.al2023_ami.value)
       instance_type               = var.instance_type
       key_name                    = aws_key_pair.this.key_name
       vpc_security_group_ids      = [aws_security_group.this.id]
@@ -360,11 +356,6 @@ It should:
       default     = "t3.micro"
     }
 
-    variable "ami_id" {
-      description = "Amazon Machine Image ID. Defaults to the latest Amazon Linux 2023 AMI for the target region — override only if you need a specific build."
-      type        = string
-      default     = null
-    }
     ```
 
     ```hcl title="outputs.tf"

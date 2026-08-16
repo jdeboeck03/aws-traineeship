@@ -29,9 +29,3 @@ variable "instance_type" {
   type        = string
   default     = "t3.micro"
 }
-
-variable "ami_id" {
-  description = "Amazon Machine Image ID. Defaults to the latest Amazon Linux 2023 AMI for the target region — override only if you need a specific build."
-  type        = string
-  default     = null
-}
