@@ -23,6 +23,7 @@ nav:
 - Terraform Fundamentals: content/terraform-fundamentals/index.md
 - EC2: content/ec2/index.md
 - Networking: content/networking/index.md
+- Terraform Modules: content/terraform-modules/index.md
 
 markdown_extensions:
 - admonition

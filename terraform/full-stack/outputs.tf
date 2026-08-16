@@ -8,6 +8,11 @@ output "public_subnet_id" {
   value       = module.vpc.public_subnet_id
 }
 
+output "ssh_security_group_id" {
+  description = "ID of the SSH security group."
+  value       = aws_security_group.ssh.id
+}
+
 output "instance_id" {
   description = "EC2 instance ID."
   value       = module.ec2.instance_id
