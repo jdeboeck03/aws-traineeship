@@ -74,6 +74,28 @@ These rules are the "why"; the template is the copy-paste starting point.
   are easy to get subtly wrong. Same for new markdown/mkdocs syntax: check the built HTML
   (`mkdocs build --strict`, then inspect `site/`) rather than assuming an extension is enabled.
 
+## Security tooling
+
+This repo is public and deploys to GitHub Pages, so secret-leak prevention is layered:
+
+1. **GitHub secret scanning + push protection** — enabled at the repo level (Settings → Code
+   security and analysis). Server-side; nothing to install.
+2. **Local pre-commit hook** (`.pre-commit-config.yaml`, gitleaks). This file is committed, but the
+   actual git hook (`.git/hooks/pre-commit`) is **not** — it's outside version control. After
+   cloning, run `pip install pre-commit && pre-commit install` (and `scoop install gitleaks` or
+   equivalent) to activate it. Without this step, commits on a fresh clone aren't scanned locally.
+3. **Claude Code hook** (`.claude/settings.json` + `.claude/hooks/scan-git-secrets.sh`) — scans
+   before `git commit`/`git push` specifically when Claude Code is driving the command. Covers
+   `git push` (which pre-commit hooks don't see) and `--no-verify` bypasses of layer 2. Fails open
+   (allows the command) if `gitleaks` or `jq` isn't on `PATH`.
+4. **No static AWS credentials anywhere in this project** — every AWS interaction goes through SSO
+   profiles (`aws configure sso`, see `getting-started/index.md`), never long-lived access keys.
+   This matters more than any scanner: AWS secret access keys have no fixed prefix (unlike access
+   key IDs, which start `AKIA`/`ASIA` and are reliably pattern-matched), so generic secret scanners
+   rely on entropy heuristics that can miss them — confirmed by testing during setup, where
+   gitleaks' generic-api-key rule caught some random test values but not others. Treat scanning as
+   a safety net, not a guarantee; the SSO-only model is the actual structural protection.
+
 ## Structure
 
 - `docs/` — notes and documentation per AWS service
