@@ -37,6 +37,13 @@ directory alongside its docs.
 - AMI IDs, and other values that go stale as AWS ships updates, should be looked up dynamically
   (SSM parameter, CLI query, Terraform data source) rather than hardcoded — see `terraform/ec2` for
   the pattern.
+- Terraform exercises are hints-first, not copy-paste: state the task and requirements, list hints
+  under a collapsed `??? question "Hints"` block, and put the full working module under a collapsed
+  `??? example "Show solution"` block (via `pymdownx.details`, already enabled in `mkdocs.yml`) —
+  trainees write their own module and only reveal the reference solution if stuck or to check their
+  work. See `docs/content/ec2/index.md` Exercise 2 for the pattern. Command workflow shown outside
+  the collapsed blocks (variables, `init`/`plan`/`apply`/`destroy`) applies regardless of whose
+  implementation the trainee wrote, so it stays visible by default.
 
 ## Structure
 

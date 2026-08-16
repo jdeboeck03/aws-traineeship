@@ -182,25 +182,209 @@ instance**) or via `aws ec2 terminate-instances --instance-ids <id>`.
 See [Terraform Fundamentals](../terraform-fundamentals/index.md) if you haven't installed
 Terraform yet or need a refresher on the core concepts and workflow used below.
 
-### Project layout
+### Your task
 
-```
-terraform/ec2/
-├── main.tf          # provider and resources
-├── variables.tf     # input variables
-└── outputs.tf       # useful values printed after apply
-```
+Build a Terraform module in `terraform/ec2/` that reproduces Exercise 1 as code — an EC2 instance
+you can SSH into, with its own security group, tagged per [Tagging](../tagging/index.md), running
+the current Amazon Linux 2023 AMI without hardcoding an AMI ID. Follow the project layout from
+[Terraform Fundamentals](../terraform-fundamentals/index.md#project-layout): `main.tf`,
+`variables.tf`, `outputs.tf`.
 
-The full source is in [`terraform/ec2/`](https://github.com/jdeboeck03/aws-traineeship/tree/main/terraform/ec2) in this repo.
+It should:
 
-The provider block sets `default_tags` so every resource this module creates is automatically
-tagged with `Project`, `Owner`, and `Contact` — see [Tagging](../tagging/index.md). This is why
-`owner`, `contact`, and `project` are required variables below alongside `name`. This includes the
-security group, which also gets a `Name` tag — unlike the console flow above, nothing here ends up
-untagged, and `terraform destroy` removes the instance and its security group together.
+- Launch a `t3.micro` instance on the current Amazon Linux 2023 AMI, looked up dynamically
+- Create a dedicated security group allowing inbound SSH (port 22)
+- Generate its own SSH key pair — no manual `ssh-keygen` — and write the private key to a local
+  `.pem` file you can use immediately
+- Tag every resource with `Project`, `Owner`, and `Contact` (see [Tagging](../tagging/index.md)),
+  plus a `Name` tag
+- Take `name`, `owner`, `contact`, and `project` as required input variables, with no defaults
+- Output the instance's public IP, instance ID, and a ready-to-run SSH command
 
-The AMI is looked up automatically too, via the same SSM parameter used in the CLI example above —
-`ami_id` only needs to be set if you want to pin a specific build.
+??? question "Hints"
+    - You'll need three providers, not just `aws` — think about how the SSH key gets onto AWS
+      *and* onto your own machine without running `ssh-keygen` yourself.
+    - Terraform can generate the key pair itself: one resource creates it in memory, one uploads
+      the public half to AWS, one writes the private half to a `.pem` file with the right
+      permissions (`0400`). Look at how their attributes chain into each other.
+    - Don't hardcode an AMI ID — it goes stale within weeks. AWS publishes the current Amazon
+      Linux 2023 build under a public SSM parameter
+      (`/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64`). There's a data
+      source for reading SSM parameters — and its `value` comes back marked sensitive by default
+      even though this one isn't a secret, so you'll need a way to unmark it.
+    - Use the same `profile = "traineeship"` convention from
+      [Getting Started](../getting-started/index.md) in your provider block.
+
+??? example "Show solution"
+    ```
+    terraform/ec2/
+    ├── main.tf          # provider and resources
+    ├── variables.tf     # input variables
+    └── outputs.tf       # useful values printed after apply
+    ```
+
+    The provider block sets `default_tags` so every resource this module creates is automatically
+    tagged with `Project`, `Owner`, and `Contact`. This includes the security group, which also
+    gets a `Name` tag — nothing ends up untagged, and `terraform destroy` removes the instance and
+    its security group together.
+
+    Full source: [`terraform/ec2/`](https://github.com/jdeboeck03/aws-traineeship/tree/main/terraform/ec2)
+
+    ```hcl title="main.tf"
+    terraform {
+      required_providers {
+        aws = {
+          source  = "hashicorp/aws"
+          version = "~> 5.0"
+        }
+        tls = {
+          source  = "hashicorp/tls"
+          version = "~> 4.0"
+        }
+        local = {
+          source  = "hashicorp/local"
+          version = "~> 2.0"
+        }
+      }
+    }
+
+    provider "aws" {
+      region  = var.region
+      profile = "traineeship"
+
+      default_tags {
+        tags = {
+          Project = var.project
+          Owner   = var.owner
+          Contact = var.contact
+        }
+      }
+    }
+
+    # AWS publishes the current recommended Amazon Linux 2023 build under this SSM parameter, so we
+    # never have to hardcode an AMI ID that goes stale as new builds ship every few weeks.
+    data "aws_ssm_parameter" "al2023_ami" {
+      name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
+    }
+
+    locals {
+      # SSM parameter values are marked sensitive by default even though this one (a public AMI ID)
+      # isn't a secret — unmark it so it's still visible in plan/apply output.
+      ami_id = coalesce(var.ami_id, nonsensitive(data.aws_ssm_parameter.al2023_ami.value))
+    }
+
+    # Generate an SSH key pair locally and upload the public key to AWS.
+    resource "tls_private_key" "this" {
+      algorithm = "RSA"
+      rsa_bits  = 4096
+    }
+
+    resource "aws_key_pair" "this" {
+      key_name   = "${var.name}-key"
+      public_key = tls_private_key.this.public_key_openssh
+    }
+
+    # Save the private key to disk so you can SSH in.
+    resource "local_sensitive_file" "private_key" {
+      filename        = "${var.name}-key.pem"
+      content         = tls_private_key.this.private_key_pem
+      file_permission = "0400"
+    }
+
+    # Security group: allow SSH inbound, all outbound.
+    resource "aws_security_group" "this" {
+      name        = "${var.name}-sg"
+      description = "Allow SSH inbound"
+
+      ingress {
+        description = "SSH"
+        from_port   = 22
+        to_port     = 22
+        protocol    = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+      }
+
+      egress {
+        from_port   = 0
+        to_port     = 0
+        protocol    = "-1"
+        cidr_blocks = ["0.0.0.0/0"]
+      }
+
+      tags = {
+        Name = "${var.name}-sg"
+      }
+    }
+
+    resource "aws_instance" "this" {
+      ami                         = local.ami_id
+      instance_type               = var.instance_type
+      key_name                    = aws_key_pair.this.key_name
+      vpc_security_group_ids      = [aws_security_group.this.id]
+      associate_public_ip_address = true
+
+      tags = {
+        Name = var.name
+      }
+    }
+    ```
+
+    ```hcl title="variables.tf"
+    variable "name" {
+      description = "Unique name used to tag and name all resources (e.g. your first name)."
+      type        = string
+    }
+
+    variable "owner" {
+      description = "Your identity for the Owner tag, e.g. firstname.lastname."
+      type        = string
+    }
+
+    variable "contact" {
+      description = "Your email address for the Contact tag."
+      type        = string
+    }
+
+    variable "project" {
+      description = "Project you are working on"
+      type        = string
+    }
+
+    variable "region" {
+      description = "AWS region to deploy into."
+      type        = string
+      default     = "eu-west-1"
+    }
+
+    variable "instance_type" {
+      description = "EC2 instance type."
+      type        = string
+      default     = "t3.micro"
+    }
+
+    variable "ami_id" {
+      description = "Amazon Machine Image ID. Defaults to the latest Amazon Linux 2023 AMI for the target region — override only if you need a specific build."
+      type        = string
+      default     = null
+    }
+    ```
+
+    ```hcl title="outputs.tf"
+    output "public_ip" {
+      description = "Public IP address of the EC2 instance."
+      value       = aws_instance.this.public_ip
+    }
+
+    output "instance_id" {
+      description = "EC2 instance ID."
+      value       = aws_instance.this.id
+    }
+
+    output "ssh_command" {
+      description = "Ready-to-run SSH command."
+      value       = "ssh -i ${local_sensitive_file.private_key.filename} ec2-user@${aws_instance.this.public_ip}"
+    }
+    ```
 
 ### Set your variables
 
