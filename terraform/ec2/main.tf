@@ -57,6 +57,7 @@ resource "aws_instance" "this" {
   subnet_id                   = var.subnet_id
   vpc_security_group_ids      = length(var.security_group_ids) > 0 ? var.security_group_ids : [aws_security_group.this[0].id]
   associate_public_ip_address = true
+  iam_instance_profile        = var.iam_instance_profile
 
   tags = {
     Name = var.name

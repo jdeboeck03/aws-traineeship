@@ -41,3 +41,9 @@ variable "security_group_ids" {
   type        = list(string)
   default     = []
 }
+
+variable "iam_instance_profile" {
+  description = "Name of the IAM instance profile to attach. If null, the instance runs without a profile."
+  type        = string
+  default     = null
+}

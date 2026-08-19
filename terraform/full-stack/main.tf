@@ -62,15 +62,22 @@ resource "aws_security_group" "ssh" {
   }
 }
 
+module "iam" {
+  source      = "../iam"
+  name        = var.name
+  bucket_name = var.bucket_name
+}
+
 module "ec2" {
-  source             = "../ec2"
-  name               = var.name
-  owner              = var.owner
-  contact            = var.contact
-  project            = var.project
-  region             = var.region
-  subnet_id          = module.vpc.public_subnet_id
-  security_group_ids = [aws_security_group.ssh.id]
+  source               = "../ec2"
+  name                 = var.name
+  owner                = var.owner
+  contact              = var.contact
+  project              = var.project
+  region               = var.region
+  subnet_id            = module.vpc.public_subnet_id
+  security_group_ids   = [aws_security_group.ssh.id]
+  iam_instance_profile = module.iam.instance_profile_name
 }
 
 module "s3" {

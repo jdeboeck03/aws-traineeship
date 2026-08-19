@@ -25,6 +25,7 @@ nav:
 - Networking: content/networking/index.md
 - Terraform Modules: content/terraform-modules/index.md
 - S3: content/s3/index.md
+- IAM: content/iam/index.md
 
 markdown_extensions:
 - admonition
