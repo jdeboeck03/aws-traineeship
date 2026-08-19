@@ -11,26 +11,43 @@ create, but the Terraform equivalents will be written from scratch here.
 Each service module will have a `terraform/` directory alongside its documentation containing the
 relevant `.tf` files.
 
-### Module structure convention
+### EC2 and VPC are taught standalone, then composed
 
-Child modules (`terraform/vpc/`, `terraform/ec2/`, `terraform/s3/`, ...) contain only resources,
-variables, and outputs — **no `provider` or `terraform` blocks**. Provider configuration (region,
-profile, `default_tags`) lives exclusively in the root module. This avoids a second, independent
-provider instance with divergent settings (tags, profile) and matches real-world Terraform practice.
+The first two modules (EC2, Networking) are each applied and destroyed on their own — full
+`provider` block, own state, own `terraform apply`/`terraform destroy`. This mirrors the very first
+exercise (EC2's manual launch) and keeps each module's concepts isolated before introducing module
+composition as its own idea.
+
+**Terraform Modules** (taught right after Networking) is where composition is introduced as a
+deliberate lesson: it refactors both standalone modules — stripping their `provider`/`terraform`
+blocks and adding the inputs `ec2` needs to accept an external subnet/security group — into child
+modules, then builds `terraform/full-stack/` as the root that composes them. This is presented as
+an improvement ("here's why/how we'd combine these"), not a rule stated upfront.
+
+### Module structure convention (from Terraform Modules onwards)
+
+Once a module has been refactored into (or, for S3/IAM/every module after, written directly as) a
+child module, it contains only resources, variables, and outputs — **no `provider` or `terraform`
+blocks**. Provider configuration (region, profile, `default_tags`) lives exclusively in the root
+module. This avoids a second, independent provider instance with divergent settings (tags, profile)
+and matches real-world Terraform practice.
 
 ### Incremental full-stack root (`terraform/full-stack/`)
 
-Rather than applying each child module in isolation, trainees work from a single root module
-(`terraform/full-stack/`) that grows throughout the day. Each new service module is wired in as a
-`module` call after its concepts section is taught.
+From the Terraform Modules lesson onwards, trainees work from a single root module
+(`terraform/full-stack/`) that grows throughout the day. Each new service module (S3, IAM, ...) is
+wired in as a `module` call after its concepts section is taught — written directly as a
+provider-less child module from the start, with no standalone stage of its own.
 
 Benefits:
-- One `terraform destroy` cleans up everything at the end of the day.
-- Trainees always work in one directory — matching how real Terraform projects are structured.
+- One `terraform destroy` cleans up everything from Terraform Modules onwards.
+- Trainees work in one directory for the rest of the day — matching how real Terraform projects are
+  structured.
 - The growing `main.tf` is itself a learning artifact showing how services compose.
 
-Each module doc's exercise section says "add this module call to `terraform/full-stack/main.tf` and
-apply from there" rather than running `terraform apply` inside the child module directory.
+Each module doc's exercise section (S3 onwards) says "add this module call to
+`terraform/full-stack/main.tf` and apply from there" rather than running `terraform apply` inside
+the child module directory.
 
 ## Status of existing content
 

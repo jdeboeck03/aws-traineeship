@@ -177,7 +177,28 @@ output "instance_profile_name" {
 
 ### Wire it into the full stack
 
-Add the IAM module to `terraform/full-stack/main.tf` and pass its output to the EC2 module:
+The `ec2` module doesn't yet accept an instance profile — add that input first. Add a variable to
+`terraform/ec2/variables.tf`:
+
+```hcl
+variable "iam_instance_profile" {
+  description = "Name of the IAM instance profile to attach. If null, the instance runs without a profile."
+  type        = string
+  default     = null
+}
+```
+
+And pass it through in `terraform/ec2/main.tf`'s `aws_instance` resource:
+
+```hcl
+resource "aws_instance" "this" {
+  # ... existing arguments ...
+  iam_instance_profile = var.iam_instance_profile
+}
+```
+
+Then add the IAM module to `terraform/full-stack/main.tf` and pass its output into the EC2 module
+call:
 
 ```hcl
 module "iam" {
@@ -185,11 +206,7 @@ module "iam" {
   name        = var.name
   bucket_name = var.bucket_name
 }
-```
 
-Update the EC2 module call to include the instance profile:
-
-```hcl
 module "ec2" {
   # ... existing arguments ...
   iam_instance_profile = module.iam.instance_profile_name
