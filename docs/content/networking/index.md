@@ -189,7 +189,10 @@ output "public_subnet_id" {
 
 ### Wire it into the full stack
 
-Add the VPC module to `terraform/full-stack/main.tf`:
+Now that a VPC exists, move the EC2 instance from its implicit default-VPC placement (set up in the
+[EC2](../ec2/index.md) module) into this VPC's public subnet. Add the VPC module to
+`terraform/full-stack/main.tf`, add an SSH security group scoped to the new VPC, and pass both into
+the existing `ec2` module call:
 
 ```hcl
 module "vpc" {
@@ -200,33 +203,87 @@ module "vpc" {
   project = var.project
   region  = var.region
 }
+
+resource "aws_security_group" "ssh" {
+  name        = "${var.name}-ssh-sg"
+  description = "Allow SSH inbound"
+  vpc_id      = module.vpc.vpc_id
+
+  ingress {
+    description = "SSH"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.name}-ssh-sg"
+  }
+}
+
+module "ec2" {
+  source             = "../ec2"
+  name               = var.name
+  owner              = var.owner
+  contact            = var.contact
+  project            = var.project
+  region             = var.region
+  subnet_id          = module.vpc.public_subnet_id
+  security_group_ids = [aws_security_group.ssh.id]
+}
 ```
 
-The `vpc_id` and `public_subnet_id` outputs are consumed by the EC2 module call in the same file.
+The security group is defined directly in the root, not inside either child module — it needs the
+VPC's ID (an input only the root can see after calling `module.vpc`) and feeds into the EC2 module
+as an input. This is exactly the "resources that span modules live in the root" pattern covered in
+[Terraform Modules](../terraform-modules/index.md), taught next.
 
-### Set your variables
+The `ec2` module's `security_group_ids` variable defaults to `[]`, which is what made it create its
+own security group in the EC2 module — passing a value here is what skips that and uses this one
+instead.
 
-Create a `terraform/full-stack/terraform.tfvars` (git-ignored, so nothing personal gets committed):
+Add the new outputs to `terraform/full-stack/outputs.tf`:
 
 ```hcl
-# terraform/full-stack/terraform.tfvars — not committed
-name    = "<your-name>"
-owner   = "<your-name>.<your-lastname>"
-contact = "<you>@axxes.com"
-project = "SDT-Traineeship"
+output "vpc_id" {
+  description = "ID of the VPC."
+  value       = module.vpc.vpc_id
+}
+
+output "public_subnet_id" {
+  description = "ID of the public subnet."
+  value       = module.vpc.public_subnet_id
+}
+
+output "ssh_security_group_id" {
+  description = "ID of the SSH security group."
+  value       = aws_security_group.ssh.id
+}
 ```
 
 ### Apply
 
+No new variables are needed — the VPC module reuses the `name`/`owner`/`contact`/`project`/`region`
+already in `terraform/full-stack/terraform.tfvars` from the EC2 module.
+
 ```shell
 cd terraform/full-stack
 
-terraform init
+terraform init   # only needed after adding a new module
 terraform plan
 terraform apply
 ```
 
-Terraform prints the VPC ID and subnet ID after apply.
+Terraform prints the VPC ID, subnet ID, and SSH security group ID after apply. The EC2 instance now
+launches inside the VPC's public subnet instead of the default VPC.
 
 ### Clean up
 
@@ -234,8 +291,8 @@ Terraform prints the VPC ID and subnet ID after apply.
 terraform destroy
 ```
 
-Terraform removes all five resources (VPC, subnet, IGW, route table, association) in the correct
-dependency order automatically.
+Terraform removes everything created so far — VPC, subnet, IGW, route table, association, the SSH
+security group, and the EC2 instance — in the correct dependency order automatically.
 
 ---
 

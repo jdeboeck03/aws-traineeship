@@ -83,8 +83,8 @@ ssh -i <your-name>-key.pem ec2-user@<public-ip>
 
 You can also launch an instance entirely from the CLI. Unlike the console wizard, nothing is
 created for you automatically — you create the security group, open port 22 on it, look up the
-AMI, and launch the instance yourself, in that order. This is exactly what the Terraform module in
-Exercise 2 does under the hood.
+AMI, and launch the instance yourself, in that order. This is exactly what the Terraform module
+further down this page does under the hood.
 
 !!! danger "Don't skip the security group"
     `aws ec2 run-instances` without `--security-group-ids` attaches the instance to the VPC's
@@ -171,231 +171,306 @@ instance**) or via `aws ec2 terminate-instances --instance-ids <id>`.
     ```shell
     aws ec2 delete-key-pair --key-name <your-name>-key --region eu-west-1
     ```
-    or from **EC2 → Key Pairs** in the console. If you skip this and move on to Exercise 2
-    (Terraform) with the same `<your-name>`, `terraform apply` will fail — it tries to create a key
-    pair with that same name.
+    or from **EC2 → Key Pairs** in the console. If you skip this and move on to the Terraform
+    section below with the same `<your-name>`, `terraform apply` will fail — it tries to create a
+    key pair with that same name.
 
 ---
 
-## Exercise 2 — Provision with Terraform
+## Provisioning with Terraform
 
 See [Terraform Fundamentals](../terraform-fundamentals/index.md) if you haven't installed
 Terraform yet or need a refresher on the core concepts and workflow used below.
 
-### Your task
+This reproduces Exercise 1 as code — an EC2 instance you can SSH into, with its own security
+group, tagged per [Tagging](../tagging/index.md), running the current Amazon Linux 2023 AMI
+without hardcoding an AMI ID. It's built as two pieces:
 
-Build a Terraform module in `terraform/ec2/` that reproduces Exercise 1 as code — an EC2 instance
-you can SSH into, with its own security group, tagged per [Tagging](../tagging/index.md), running
-the current Amazon Linux 2023 AMI without hardcoding an AMI ID. Follow the project layout from
-[Terraform Fundamentals](../terraform-fundamentals/index.md#project-layout): `main.tf`,
-`variables.tf`, `outputs.tf`.
+- `terraform/ec2/` is a reusable **child module** — resources and variables only, no provider
+  configuration. It's designed to be composed: `subnet_id`, `security_group_ids`, and
+  `iam_instance_profile` default to values that make it work standalone today, but later modules
+  (Networking, IAM) will override them without you touching this file again.
+- `terraform/full-stack/` is the **root module** — this is where the provider gets configured and
+  where you actually run `terraform apply`. From here on, every module in this course gets wired
+  into this same root and destroyed together in one `terraform destroy`. The mechanics of why
+  child modules don't configure a provider are covered in
+  [Terraform Modules](../terraform-modules/index.md), taught right after Networking.
 
-It should:
+### `terraform/ec2/`
 
-- Launch a `t3.micro` instance on the current Amazon Linux 2023 AMI, looked up dynamically
-- Create a dedicated security group allowing inbound SSH (port 22)
-- Generate its own SSH key pair — no manual `ssh-keygen` — and write the private key to a local
-  `.pem` file you can use immediately
-- Tag every resource with `Project`, `Owner`, and `Contact` (see [Tagging](../tagging/index.md)),
-  plus a `Name` tag
-- Take `name`, `owner`, `contact`, and `project` as required input variables, with no defaults
-- Output the instance's public IP, instance ID, and a ready-to-run SSH command
+```
+terraform/ec2/
+├── main.tf
+├── variables.tf
+└── outputs.tf
+```
 
-??? question "Hints"
-    - You'll need three providers, not just `aws` — think about how the SSH key gets onto AWS
-      *and* onto your own machine without running `ssh-keygen` yourself.
-    - Terraform can generate the key pair itself: one resource creates it in memory, one uploads
-      the public half to AWS, one writes the private half to a `.pem` file with the right
-      permissions (`0400`). Look at how their attributes chain into each other.
-    - Don't hardcode an AMI ID — it goes stale within weeks. AWS publishes the current Amazon
-      Linux 2023 build under a public SSM parameter
-      (`/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64`). There's a data
-      source for reading SSM parameters — its `value` comes back marked sensitive by default even
-      though this one isn't a secret. You'll need a way to unmark it before passing it to `ami`.
-    - Use the same `profile = "traineeship"` convention from
-      [Getting Started](../getting-started/index.md) in your provider block.
+```hcl title="main.tf"
+# AWS publishes the current recommended Amazon Linux 2023 build under this SSM parameter, so we
+# never have to hardcode an AMI ID that goes stale as new builds ship every few weeks.
+data "aws_ssm_parameter" "al2023_ami" {
+  name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
+}
 
-??? example "Show solution"
-    ```
-    terraform/ec2/
-    ├── main.tf          # provider and resources
-    ├── variables.tf     # input variables
-    └── outputs.tf       # useful values printed after apply
-    ```
+# Generate an SSH key pair locally and upload the public key to AWS.
+resource "tls_private_key" "this" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
+}
 
-    The provider block sets `default_tags` so every resource this module creates is automatically
-    tagged with `Project`, `Owner`, and `Contact`. This includes the security group, which also
-    gets a `Name` tag — nothing ends up untagged, and `terraform destroy` removes the instance and
-    its security group together.
+resource "aws_key_pair" "this" {
+  key_name   = "${var.name}-key"
+  public_key = tls_private_key.this.public_key_openssh
+}
 
-    ```hcl title="main.tf"
-    terraform {
-      required_providers {
-        aws = {
-          source  = "hashicorp/aws"
-          version = "~> 5.0"
-        }
-        tls = {
-          source  = "hashicorp/tls"
-          version = "~> 4.0"
-        }
-        local = {
-          source  = "hashicorp/local"
-          version = "~> 2.0"
-        }
-      }
+# Save the private key to disk so you can SSH in.
+resource "local_sensitive_file" "private_key" {
+  filename        = "${var.name}-key.pem"
+  content         = tls_private_key.this.private_key_pem
+  file_permission = "0400"
+}
+
+# Only create a security group when none are passed in — allows standalone use before a VPC exists.
+resource "aws_security_group" "this" {
+  count       = length(var.security_group_ids) == 0 ? 1 : 0
+  name        = "${var.name}-sg"
+  description = "Allow SSH inbound"
+
+  ingress {
+    description = "SSH"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.name}-sg"
+  }
+}
+
+resource "aws_instance" "this" {
+  # SSM parameter values are marked sensitive by default — nonsensitive() unmarks it so the AMI ID
+  # is still visible in plan/apply output.
+  ami                         = nonsensitive(data.aws_ssm_parameter.al2023_ami.value)
+  instance_type               = var.instance_type
+  key_name                    = aws_key_pair.this.key_name
+  subnet_id                   = var.subnet_id
+  vpc_security_group_ids      = length(var.security_group_ids) > 0 ? var.security_group_ids : [aws_security_group.this[0].id]
+  associate_public_ip_address = true
+  iam_instance_profile        = var.iam_instance_profile
+
+  tags = {
+    Name = var.name
+  }
+}
+```
+
+Notice there's no `provider` block here — child modules never configure a provider, that's the
+root module's job. There's also no `terraform { required_providers { ... } }` block; that's
+declared once in the root and inherited by every child.
+
+```hcl title="variables.tf"
+variable "name" {
+  description = "Unique name used to tag and name all resources (e.g. your first name)."
+  type        = string
+}
+
+variable "owner" {
+  description = "Your identity for the Owner tag, e.g. firstname.lastname."
+  type        = string
+}
+
+variable "contact" {
+  description = "Your email address for the Contact tag."
+  type        = string
+}
+
+variable "project" {
+  description = "Project you are working on."
+  type        = string
+}
+
+variable "region" {
+  description = "AWS region to deploy into."
+  type        = string
+  default     = "eu-west-1"
+}
+
+variable "instance_type" {
+  description = "EC2 instance type."
+  type        = string
+  default     = "t3.micro"
+}
+
+variable "subnet_id" {
+  description = "Subnet to launch the instance in. If null, AWS picks a subnet in the default VPC."
+  type        = string
+  default     = null
+}
+
+variable "security_group_ids" {
+  description = "Security group IDs to attach. If empty, a new SSH-allowing group is created in the default VPC."
+  type        = list(string)
+  default     = []
+}
+
+variable "iam_instance_profile" {
+  description = "Name of the IAM instance profile to attach. If null, the instance runs without a profile."
+  type        = string
+  default     = null
+}
+```
+
+```hcl title="outputs.tf"
+output "public_ip" {
+  description = "Public IP address of the EC2 instance."
+  value       = aws_instance.this.public_ip
+}
+
+output "instance_id" {
+  description = "EC2 instance ID."
+  value       = aws_instance.this.id
+}
+
+output "ssh_command" {
+  description = "Ready-to-run SSH command."
+  value       = "ssh -i ${local_sensitive_file.private_key.filename} ec2-user@${aws_instance.this.public_ip}"
+}
+```
+
+### Create the full-stack root
+
+Since `terraform/ec2/` has no provider configuration, it can't be applied on its own — you need a
+root module to call it from. Create `terraform/full-stack/`: this is the single place you'll run
+`terraform apply`/`terraform destroy` for the rest of the course, growing by one `module` block
+each time a new service is introduced.
+
+```
+terraform/full-stack/
+├── main.tf
+├── variables.tf
+└── outputs.tf
+```
+
+```hcl title="main.tf"
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
     }
-
-    provider "aws" {
-      region  = var.region
-      profile = "traineeship"
-
-      default_tags {
-        tags = {
-          Project = var.project
-          Owner   = var.owner
-          Contact = var.contact
-        }
-      }
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~> 4.0"
     }
-
-    # AWS publishes the current recommended Amazon Linux 2023 build under this SSM parameter, so we
-    # never have to hardcode an AMI ID that goes stale as new builds ship every few weeks.
-    data "aws_ssm_parameter" "al2023_ami" {
-      name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
+    local = {
+      source  = "hashicorp/local"
+      version = "~> 2.0"
     }
+  }
+}
 
-    # Generate an SSH key pair locally and upload the public key to AWS.
-    resource "tls_private_key" "this" {
-      algorithm = "RSA"
-      rsa_bits  = 4096
+provider "aws" {
+  region  = var.region
+  profile = "traineeship"
+
+  default_tags {
+    tags = {
+      Project = var.project
+      Owner   = var.owner
+      Contact = var.contact
     }
+  }
+}
 
-    resource "aws_key_pair" "this" {
-      key_name   = "${var.name}-key"
-      public_key = tls_private_key.this.public_key_openssh
-    }
+module "ec2" {
+  source  = "../ec2"
+  name    = var.name
+  owner   = var.owner
+  contact = var.contact
+  project = var.project
+  region  = var.region
+}
+```
 
-    # Save the private key to disk so you can SSH in.
-    resource "local_sensitive_file" "private_key" {
-      filename        = "${var.name}-key.pem"
-      content         = tls_private_key.this.private_key_pem
-      file_permission = "0400"
-    }
+The provider's `default_tags` block means every resource any child module creates — the instance,
+its security group, its key pair — is automatically tagged with `Project`, `Owner`, and `Contact`.
+Nothing ends up untagged, and `terraform destroy` removes it all together.
 
-    # Security group: allow SSH inbound, all outbound.
-    resource "aws_security_group" "this" {
-      name        = "${var.name}-sg"
-      description = "Allow SSH inbound"
+```hcl title="variables.tf"
+variable "name" {
+  description = "Unique name used as a prefix for all resource Name tags."
+  type        = string
+}
 
-      ingress {
-        description = "SSH"
-        from_port   = 22
-        to_port     = 22
-        protocol    = "tcp"
-        cidr_blocks = ["0.0.0.0/0"]
-      }
+variable "owner" {
+  description = "Your identity for the Owner tag, e.g. firstname.lastname."
+  type        = string
+}
 
-      egress {
-        from_port   = 0
-        to_port     = 0
-        protocol    = "-1"
-        cidr_blocks = ["0.0.0.0/0"]
-      }
+variable "contact" {
+  description = "Your email address for the Contact tag."
+  type        = string
+}
 
-      tags = {
-        Name = "${var.name}-sg"
-      }
-    }
+variable "project" {
+  description = "Project you are working on."
+  type        = string
+}
 
-    resource "aws_instance" "this" {
-      # SSM parameter values are marked sensitive by default — nonsensitive() unmarks it so the AMI ID
-      # is still visible in plan/apply output.
-      ami                         = nonsensitive(data.aws_ssm_parameter.al2023_ami.value)
-      instance_type               = var.instance_type
-      key_name                    = aws_key_pair.this.key_name
-      vpc_security_group_ids      = [aws_security_group.this.id]
-      associate_public_ip_address = true
+variable "region" {
+  description = "AWS region to deploy into."
+  type        = string
+  default     = "eu-west-1"
+}
+```
 
-      tags = {
-        Name = var.name
-      }
-    }
-    ```
+```hcl title="outputs.tf"
+output "public_ip" {
+  description = "Public IP address of the EC2 instance."
+  value       = module.ec2.public_ip
+}
 
-    ```hcl title="variables.tf"
-    variable "name" {
-      description = "Unique name used to tag and name all resources (e.g. your first name)."
-      type        = string
-    }
+output "instance_id" {
+  description = "EC2 instance ID."
+  value       = module.ec2.instance_id
+}
 
-    variable "owner" {
-      description = "Your identity for the Owner tag, e.g. firstname.lastname."
-      type        = string
-    }
-
-    variable "contact" {
-      description = "Your email address for the Contact tag."
-      type        = string
-    }
-
-    variable "project" {
-      description = "Project you are working on"
-      type        = string
-    }
-
-    variable "region" {
-      description = "AWS region to deploy into."
-      type        = string
-      default     = "eu-west-1"
-    }
-
-    variable "instance_type" {
-      description = "EC2 instance type."
-      type        = string
-      default     = "t3.micro"
-    }
-
-    ```
-
-    ```hcl title="outputs.tf"
-    output "public_ip" {
-      description = "Public IP address of the EC2 instance."
-      value       = aws_instance.this.public_ip
-    }
-
-    output "instance_id" {
-      description = "EC2 instance ID."
-      value       = aws_instance.this.id
-    }
-
-    output "ssh_command" {
-      description = "Ready-to-run SSH command."
-      value       = "ssh -i ${local_sensitive_file.private_key.filename} ec2-user@${aws_instance.this.public_ip}"
-    }
-    ```
+output "ssh_command" {
+  description = "Ready-to-run SSH command."
+  value       = module.ec2.ssh_command
+}
+```
 
 ### Set your variables
 
 `name`, `owner`, `contact`, and `project` are all required, with no defaults. Rather than repeating
-four `-var=...` flags on every command, create a `terraform.tfvars` file in `terraform/ec2/` —
-Terraform loads it automatically, and it's already git-ignored so nothing personal gets committed
+four `-var=...` flags on every command, create a `terraform.tfvars` file in `terraform/full-stack/`
+— Terraform loads it automatically, and it's already git-ignored so nothing personal gets committed
 (see [Terraform Fundamentals](../terraform-fundamentals/index.md#providing-variable-values)):
 
 ```hcl
-# terraform/ec2/terraform.tfvars — not committed
+# terraform/full-stack/terraform.tfvars — not committed
 name    = "<your-name>"
 owner   = "<your-name>.<your-lastname>"
 contact = "<you>@axxes.com"
 project = "SDT-Traineeship"
 ```
 
-### Initialise and apply
+### Apply
 
 ```shell
-cd terraform/ec2
+cd terraform/full-stack
 
-# Download the AWS provider
+# Download the AWS, tls, and local providers
 terraform init
 
 # Preview what will be created
@@ -416,7 +491,8 @@ terraform apply
     aws ec2 delete-key-pair --key-name <your-name>-key --region eu-west-1
     ```
 
-Terraform will print the instance's **public IP** when it finishes.
+Terraform prints the instance's **public IP** when it finishes. The private key was written to
+`terraform/full-stack/<your-name>-key.pem` — that's the directory you ran `apply` from.
 
 ```shell
 # SSH in using the generated key
@@ -426,11 +502,12 @@ ssh -i <your-name>-key.pem ec2-user@<printed-public-ip>
 
 ### Clean up
 
-Always destroy resources when you are done to avoid unnecessary costs:
-
 ```shell
 terraform destroy
 ```
+
+As more modules get added to `terraform/full-stack/` throughout the course, this same command
+tears down everything created so far, in the correct dependency order.
 
 ---
 
@@ -442,7 +519,8 @@ terraform destroy
 - Key pairs are the only way into a Linux instance; keep your `.pem` file secure.
 - Tags don't propagate automatically between related resources — a security group created
   alongside a tagged instance still needs its own tags.
-- Terraform lets you define infrastructure as code so it is repeatable and reviewable, and cleans
-  up everything it created — including security groups — in one `destroy`.
+- The `terraform/ec2/` module has no provider block and optional subnet/security-group/profile
+  inputs — it's designed to be composed. `terraform/full-stack/` is the root module where the
+  provider lives and where every later module gets wired in and destroyed together.
 - In later modules we will move to higher-level abstractions (ECS Fargate) where AWS manages the
   underlying VM for you.
