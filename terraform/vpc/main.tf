@@ -1,25 +1,3 @@
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-  }
-}
-
-provider "aws" {
-  region  = var.region
-  profile = "traineeship"
-
-  default_tags {
-    tags = {
-      Project = var.project
-      Owner   = var.owner
-      Contact = var.contact
-    }
-  }
-}
-
 resource "aws_vpc" "this" {
   cidr_block           = var.vpc_cidr
   enable_dns_support   = true

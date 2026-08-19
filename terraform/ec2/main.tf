@@ -1,33 +1,3 @@
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-    tls = {
-      source  = "hashicorp/tls"
-      version = "~> 4.0"
-    }
-    local = {
-      source  = "hashicorp/local"
-      version = "~> 2.0"
-    }
-  }
-}
-
-provider "aws" {
-  region  = var.region
-  profile = "traineeship"
-
-  default_tags {
-    tags = {
-      Project = var.project
-      Owner   = var.owner
-      Contact = var.contact
-    }
-  }
-}
-
 # AWS publishes the current recommended Amazon Linux 2023 build under this SSM parameter, so we
 # never have to hardcode an AMI ID that goes stale as new builds ship every few weeks.
 data "aws_ssm_parameter" "al2023_ami" {

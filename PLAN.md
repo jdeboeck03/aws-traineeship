@@ -11,6 +11,27 @@ create, but the Terraform equivalents will be written from scratch here.
 Each service module will have a `terraform/` directory alongside its documentation containing the
 relevant `.tf` files.
 
+### Module structure convention
+
+Child modules (`terraform/vpc/`, `terraform/ec2/`, `terraform/s3/`, ...) contain only resources,
+variables, and outputs — **no `provider` or `terraform` blocks**. Provider configuration (region,
+profile, `default_tags`) lives exclusively in the root module. This avoids a second, independent
+provider instance with divergent settings (tags, profile) and matches real-world Terraform practice.
+
+### Incremental full-stack root (`terraform/full-stack/`)
+
+Rather than applying each child module in isolation, trainees work from a single root module
+(`terraform/full-stack/`) that grows throughout the day. Each new service module is wired in as a
+`module` call after its concepts section is taught.
+
+Benefits:
+- One `terraform destroy` cleans up everything at the end of the day.
+- Trainees always work in one directory — matching how real Terraform projects are structured.
+- The growing `main.tf` is itself a learning artifact showing how services compose.
+
+Each module doc's exercise section says "add this module call to `terraform/full-stack/main.tf` and
+apply from there" rather than running `terraform apply` inside the child module directory.
+
 ## Status of existing content
 
 | Topic | Status | Notes |
@@ -171,8 +192,8 @@ EventBridge (schedule)
 All services → CloudWatch Logs + Metrics
 ```
 
-**Deliverable:** A single Terraform root module (`terraform/`) that provisions the entire stack.
-The Quarkus app in `app/` integrates with DynamoDB and SQS via the AWS SDK.
+**Deliverable:** The already-growing `terraform/full-stack/` root module, now complete with all
+services wired in. The Quarkus app in `app/` integrates with DynamoDB and SQS via the AWS SDK.
 
 **Remote state:** This is also where we introduce an S3 + DynamoDB remote backend (state bucket +
 lock table), once S3 and DynamoDB have already been taught as services in their own right. Not

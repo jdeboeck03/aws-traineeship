@@ -72,3 +72,8 @@ module "ec2" {
   subnet_id          = module.vpc.public_subnet_id
   security_group_ids = [aws_security_group.ssh.id]
 }
+
+module "s3" {
+  source      = "../s3"
+  bucket_name = var.bucket_name
+}

@@ -23,3 +23,8 @@ variable "region" {
   type        = string
   default     = "eu-west-1"
 }
+
+variable "bucket_name" {
+  description = "Globally unique S3 bucket name, e.g. <your-name>-traineeship-site."
+  type        = string
+}

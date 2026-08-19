@@ -27,3 +27,8 @@ output "ssh_command" {
   description = "Ready-to-run SSH command."
   value       = module.ec2.ssh_command
 }
+
+output "website_endpoint" {
+  description = "HTTP endpoint for the S3 static website."
+  value       = module.s3.website_endpoint
+}
