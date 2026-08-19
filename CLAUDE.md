@@ -62,15 +62,12 @@ These rules are the "why"; the template is the copy-paste starting point.
   creation, and the cleanup steps multiply the risk of leftover resources. Replace Exercise 1 with
   an `!!! info "No manual exercise for this module"` callout explaining the rationale (see
   `docs/content/networking/index.md` for the pattern).
-- **Terraform exercises are hints-first, not copy-paste.** State the task and requirements, list
-  hints under a collapsed `??? question "Hints"` block, and put the full working module under a
-  collapsed `??? example "Show solution"` block (via `pymdownx.details`, already enabled in
-  `mkdocs.yml`) — trainees write their own module and only reveal the reference solution if stuck
-  or to check their work. See `docs/content/ec2/index.md` Exercise 2 for the pattern. Command
-  workflow shown outside the collapsed blocks (variables, `init`/`plan`/`apply`/`destroy`) applies
-  regardless of whose implementation the trainee wrote, so it stays visible by default. Paste the
-  solution code inline in full — **don't link the public GitHub repo** for it: the code's already
-  there, and a repo link lets trainees browse ahead into modules not taught yet.
+- **Terraform is copy-along, not an exercise.** Show the Terraform code directly — no collapsed
+  hints or solution blocks. This is an AWS traineeship, not a Terraform course; trainees should
+  spend their time understanding AWS concepts, not wrestling with HCL syntax. After showing each
+  file, add a short paragraph explaining the non-obvious decisions (why a resource exists, why
+  ordering matters, a common gotcha) — explain the *why*, not the *what*. See
+  `docs/content/networking/index.md` for the pattern.
 - **Variable hygiene.** Personal per-trainee values (`name`, `owner`, `contact`, `project`, ...)
   are required variables with no default. Once a module needs more than ~2 required variables,
   point at the `terraform.tfvars` pattern (`terraform-fundamentals/index.md`) instead of a growing

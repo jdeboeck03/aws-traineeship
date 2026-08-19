@@ -63,195 +63,170 @@ of scope for these exercises but worth knowing it exists.
     EC2 is the exception: launching an instance manually first makes AMIs, key pairs, and security
     groups concrete before Terraform abstracts them away.
 
-## Exercise — Provision with Terraform
+## Provisioning with Terraform
 
-See [Terraform Fundamentals](../terraform-fundamentals/index.md) if you haven't used Terraform yet
-or need a refresher.
+The VPC module creates a minimal public network: one VPC, one public subnet, an internet gateway,
+and the route table that connects them.
 
-### Your task
+### `terraform/vpc/`
 
-Build a Terraform module in `terraform/vpc/` that creates a functional public VPC. Follow the same
-layout as previous modules: `main.tf`, `variables.tf`, `outputs.tf`.
+```
+terraform/vpc/
+├── main.tf
+├── variables.tf
+└── outputs.tf
+```
 
-It should:
+```hcl title="main.tf"
+resource "aws_vpc" "this" {
+  cidr_block           = var.vpc_cidr
+  enable_dns_support   = true
+  enable_dns_hostnames = true
 
-- Create a VPC with CIDR `10.0.0.0/16` and DNS hostnames enabled
-- Create one public subnet (`10.0.1.0/24`) in `eu-west-1a` that auto-assigns public IPs
-- Create an internet gateway and attach it to the VPC
-- Create a route table with a default route (`0.0.0.0/0`) to the internet gateway, and associate
-  it with the public subnet
-- Tag every resource with `Project`, `Owner`, `Contact` (via `default_tags`) plus a `Name` tag
-- Take `name`, `owner`, `contact`, and `project` as required variables
-- Output the VPC ID and the public subnet ID — the Terraform Modules section will use both
+  tags = {
+    Name = "${var.name}-vpc"
+  }
+}
 
-??? question "Hints"
-    - All resources in this module come from the `aws` provider — no additional providers needed.
-    - Create the VPC first; the subnet, IGW, and route table all need `vpc_id = aws_vpc.this.id`.
-    - Look up `aws_vpc`, `aws_subnet`, `aws_internet_gateway`, `aws_route_table`, and
-      `aws_route_table_association` in the
-      [Terraform Registry](https://registry.terraform.io/providers/hashicorp/aws/latest/docs).
-    - The IGW needs to be *attached* to the VPC — check which resource handles attachment vs. which
-      just creates the gateway.
-    - The route table alone isn't enough — you also need to *associate* it with the subnet. There's
-      a separate resource for that.
-    - `enable_dns_hostnames = true` on the VPC is required for resources to get public DNS names.
-    - `map_public_ip_on_launch = true` on the subnet is what makes instances in it get a public IP
-      automatically — without it, instances are public-subnet-routable but have no IP.
+resource "aws_subnet" "public" {
+  vpc_id                  = aws_vpc.this.id
+  cidr_block              = var.public_subnet_cidr
+  availability_zone       = "${var.region}a"
+  map_public_ip_on_launch = true
 
-??? example "Show solution"
-    ```
-    terraform/vpc/
-    ├── main.tf
-    ├── variables.tf
-    └── outputs.tf
-    ```
+  tags = {
+    Name = "${var.name}-public-subnet"
+  }
+}
 
-    ```hcl title="main.tf"
-    terraform {
-      required_providers {
-        aws = {
-          source  = "hashicorp/aws"
-          version = "~> 5.0"
-        }
-      }
-    }
+resource "aws_internet_gateway" "this" {
+  vpc_id = aws_vpc.this.id
 
-    provider "aws" {
-      region  = var.region
-      profile = "traineeship"
+  tags = {
+    Name = "${var.name}-igw"
+  }
+}
 
-      default_tags {
-        tags = {
-          Project = var.project
-          Owner   = var.owner
-          Contact = var.contact
-        }
-      }
-    }
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.this.id
 
-    resource "aws_vpc" "this" {
-      cidr_block           = var.vpc_cidr
-      enable_dns_support   = true
-      enable_dns_hostnames = true
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.this.id
+  }
 
-      tags = {
-        Name = "${var.name}-vpc"
-      }
-    }
+  tags = {
+    Name = "${var.name}-public-rt"
+  }
+}
 
-    resource "aws_subnet" "public" {
-      vpc_id                  = aws_vpc.this.id
-      cidr_block              = var.public_subnet_cidr
-      availability_zone       = "${var.region}a"
-      map_public_ip_on_launch = true
+resource "aws_route_table_association" "public" {
+  subnet_id      = aws_subnet.public.id
+  route_table_id = aws_route_table.public.id
+}
+```
 
-      tags = {
-        Name = "${var.name}-public-subnet"
-      }
-    }
+A few things worth noting:
 
-    resource "aws_internet_gateway" "this" {
-      vpc_id = aws_vpc.this.id
+- `enable_dns_hostnames = true` is required for instances to get a public DNS name.
+- `map_public_ip_on_launch = true` on the subnet is what makes instances in it automatically
+  receive a public IP — without it, the subnet is publicly routable but instances have no address.
+- The route `0.0.0.0/0 → IGW` is what makes the subnet *public*. The `aws_route_table_association`
+  is a separate resource that connects the route table to the subnet — forgetting it leaves the
+  subnet using the VPC's default route table, which has no internet route.
 
-      tags = {
-        Name = "${var.name}-igw"
-      }
-    }
+```hcl title="variables.tf"
+variable "name" {
+  description = "Unique name used as a prefix for all resource Name tags."
+  type        = string
+}
 
-    resource "aws_route_table" "public" {
-      vpc_id = aws_vpc.this.id
+variable "owner" {
+  description = "Your identity for the Owner tag, e.g. firstname.lastname."
+  type        = string
+}
 
-      route {
-        cidr_block = "0.0.0.0/0"
-        gateway_id = aws_internet_gateway.this.id
-      }
+variable "contact" {
+  description = "Your email address for the Contact tag."
+  type        = string
+}
 
-      tags = {
-        Name = "${var.name}-public-rt"
-      }
-    }
+variable "project" {
+  description = "Project you are working on."
+  type        = string
+}
 
-    resource "aws_route_table_association" "public" {
-      subnet_id      = aws_subnet.public.id
-      route_table_id = aws_route_table.public.id
-    }
-    ```
+variable "region" {
+  description = "AWS region to deploy into."
+  type        = string
+  default     = "eu-west-1"
+}
 
-    ```hcl title="variables.tf"
-    variable "name" {
-      description = "Unique name used as a prefix for all resource Name tags."
-      type        = string
-    }
+variable "vpc_cidr" {
+  description = "CIDR block for the VPC."
+  type        = string
+  default     = "10.0.0.0/16"
+}
 
-    variable "owner" {
-      description = "Your identity for the Owner tag, e.g. firstname.lastname."
-      type        = string
-    }
+variable "public_subnet_cidr" {
+  description = "CIDR block for the public subnet."
+  type        = string
+  default     = "10.0.1.0/24"
+}
+```
 
-    variable "contact" {
-      description = "Your email address for the Contact tag."
-      type        = string
-    }
+```hcl title="outputs.tf"
+output "vpc_id" {
+  description = "ID of the VPC."
+  value       = aws_vpc.this.id
+}
 
-    variable "project" {
-      description = "Project you are working on."
-      type        = string
-    }
+output "public_subnet_id" {
+  description = "ID of the public subnet."
+  value       = aws_subnet.public.id
+}
+```
 
-    variable "region" {
-      description = "AWS region to deploy into."
-      type        = string
-      default     = "eu-west-1"
-    }
+### Wire it into the full stack
 
-    variable "vpc_cidr" {
-      description = "CIDR block for the VPC."
-      type        = string
-      default     = "10.0.0.0/16"
-    }
+Add the VPC module to `terraform/full-stack/main.tf`:
 
-    variable "public_subnet_cidr" {
-      description = "CIDR block for the public subnet."
-      type        = string
-      default     = "10.0.1.0/24"
-    }
-    ```
+```hcl
+module "vpc" {
+  source  = "../vpc"
+  name    = var.name
+  owner   = var.owner
+  contact = var.contact
+  project = var.project
+  region  = var.region
+}
+```
 
-    ```hcl title="outputs.tf"
-    output "vpc_id" {
-      description = "ID of the VPC."
-      value       = aws_vpc.this.id
-    }
-
-    output "public_subnet_id" {
-      description = "ID of the public subnet."
-      value       = aws_subnet.public.id
-    }
-    ```
+The `vpc_id` and `public_subnet_id` outputs are consumed by the EC2 module call in the same file.
 
 ### Set your variables
 
-Create a `terraform.tfvars` in `terraform/vpc/` (git-ignored, so nothing personal gets committed):
+Create a `terraform/full-stack/terraform.tfvars` (git-ignored, so nothing personal gets committed):
 
 ```hcl
-# terraform/vpc/terraform.tfvars — not committed
+# terraform/full-stack/terraform.tfvars — not committed
 name    = "<your-name>"
 owner   = "<your-name>.<your-lastname>"
 contact = "<you>@axxes.com"
 project = "SDT-Traineeship"
 ```
 
-### Initialise and apply
+### Apply
 
 ```shell
-cd terraform/vpc
+cd terraform/full-stack
 
 terraform init
 terraform plan
 terraform apply
 ```
 
-Terraform will print the VPC ID and subnet ID after apply.
+Terraform prints the VPC ID and subnet ID after apply.
 
 ### Clean up
 
@@ -275,5 +250,3 @@ dependency order automatically.
   reachable public address — either missing and you can't connect.
 - `terraform destroy` removes everything in dependency order; the manual cleanup order (association
   → route table → IGW → subnet → VPC) is what Terraform figures out for you.
-- The VPC ID and subnet ID output here feed directly into the
-  [Terraform Modules](../terraform-modules/index.md) exercise that comes next.

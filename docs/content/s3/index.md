@@ -71,145 +71,111 @@ transition objects automatically.
     EC2 is the exception: launching an instance manually first makes AMIs, key pairs, and security
     groups concrete before Terraform abstracts them away.
 
-## Exercise — Provision with Terraform
+## Provisioning with Terraform
 
-See [Terraform Fundamentals](../terraform-fundamentals/index.md) if you haven't used Terraform yet
-or need a refresher.
+The S3 module creates a publicly readable static website bucket and uploads a minimal `index.html`.
 
-### Your task
+### `terraform/s3/`
 
-Build a Terraform module in `terraform/s3/` that creates a publicly readable static website bucket.
-Follow the same layout as previous modules: `main.tf`, `variables.tf`, `outputs.tf`.
+```
+terraform/s3/
+├── main.tf
+├── variables.tf
+├── outputs.tf
+└── index.html
+```
 
-It should:
+```hcl title="main.tf"
+resource "aws_s3_bucket" "this" {
+  bucket = var.bucket_name
 
-- Create an S3 bucket with a globally unique name (use `<your-name>-traineeship-site` as the
-  convention)
-- Enable static website hosting, with `index.html` as the index document
-- Disable the Block Public Access settings that would prevent a public bucket policy
-- Attach a bucket policy that allows anyone (`*`) to `s3:GetObject` on any object in the bucket
-- Upload a minimal `index.html` as an S3 object so the site has something to serve
-- Tag every resource with `Project`, `Owner`, `Contact` (via `default_tags`)
-- Take `name`, `owner`, `contact`, and `project` as required variables
-- Output the bucket name and the website endpoint URL
+  tags = {
+    Name = var.bucket_name
+  }
+}
 
-??? question "Hints"
-    - The bucket resource is `aws_s3_bucket`. Separate configuration resources handle website
-      hosting (`aws_s3_bucket_website_configuration`), public access (`aws_s3_bucket_public_access_block`),
-      and the policy (`aws_s3_bucket_policy`) — these were split out of the main resource in
-      provider v4.
-    - Look up all four resources in the
-      [Terraform Registry](https://registry.terraform.io/providers/hashicorp/aws/latest/docs).
-    - `aws_s3_bucket_public_access_block` has four boolean flags. All four default to `true`
-      (blocking public access). Set all four to `false` to allow the bucket policy to take effect.
-    - The bucket policy JSON is an IAM-style JSON document. Use Terraform's `jsonencode()` function
-      to write it as a native HCL map rather than an escaped string.
-    - The `Principal` for a public read policy is `"*"`. The `Action` is `"s3:GetObject"`. The
-      `Resource` must include the `/*` suffix to cover objects, not just the bucket itself:
-      `"${aws_s3_bucket.this.arn}/*"`.
-    - The `aws_s3_object` resource uploads a local file. Use `content_type = "text/html"` so
-      browsers render it correctly.
-    - The website endpoint comes from `aws_s3_bucket_website_configuration.this.website_endpoint`.
-    - `aws_s3_bucket_public_access_block` must be applied *before* `aws_s3_bucket_policy` or the
-      policy attachment will fail — add a `depends_on` to enforce the order.
+resource "aws_s3_bucket_public_access_block" "this" {
+  bucket = aws_s3_bucket.this.id
 
-??? example "Show solution"
-    ```
-    terraform/s3/
-    ├── main.tf
-    ├── variables.tf
-    ├── outputs.tf
-    └── index.html
-    ```
+  block_public_acls       = false
+  block_public_policy     = false
+  ignore_public_acls      = false
+  restrict_public_buckets = false
+}
 
-    ```hcl title="main.tf"
-    resource "aws_s3_bucket" "this" {
-      bucket = var.bucket_name
+resource "aws_s3_bucket_website_configuration" "this" {
+  bucket = aws_s3_bucket.this.id
 
-      tags = {
-        Name = var.bucket_name
+  index_document {
+    suffix = "index.html"
+  }
+}
+
+resource "aws_s3_bucket_policy" "public_read" {
+  bucket = aws_s3_bucket.this.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = "s3:GetObject"
+        Resource  = "${aws_s3_bucket.this.arn}/*"
       }
-    }
+    ]
+  })
 
-    resource "aws_s3_bucket_public_access_block" "this" {
-      bucket = aws_s3_bucket.this.id
+  # Block Public Access must be disabled before the policy can be applied.
+  depends_on = [aws_s3_bucket_public_access_block.this]
+}
 
-      block_public_acls       = false
-      block_public_policy     = false
-      ignore_public_acls      = false
-      restrict_public_buckets = false
-    }
+resource "aws_s3_object" "index" {
+  bucket       = aws_s3_bucket.this.id
+  key          = "index.html"
+  source       = "${path.module}/index.html"
+  content_type = "text/html"
+}
+```
 
-    resource "aws_s3_bucket_website_configuration" "this" {
-      bucket = aws_s3_bucket.this.id
+S3 configuration is split across multiple resources — `aws_s3_bucket` only creates the bucket;
+website hosting, public access settings, and policies are each their own resource. The `depends_on`
+on the policy is required: AWS rejects a public bucket policy while Block Public Access is still
+enabled, and Terraform needs an explicit hint to sequence them correctly.
 
-      index_document {
-        suffix = "index.html"
-      }
-    }
+```hcl title="variables.tf"
+variable "bucket_name" {
+  description = "Globally unique S3 bucket name."
+  type        = string
+}
+```
 
-    resource "aws_s3_bucket_policy" "public_read" {
-      bucket = aws_s3_bucket.this.id
+```hcl title="outputs.tf"
+output "bucket_name" {
+  description = "Name of the S3 bucket."
+  value       = aws_s3_bucket.this.id
+}
 
-      policy = jsonencode({
-        Version = "2012-10-17"
-        Statement = [
-          {
-            Effect    = "Allow"
-            Principal = "*"
-            Action    = "s3:GetObject"
-            Resource  = "${aws_s3_bucket.this.arn}/*"
-          }
-        ]
-      })
+output "website_endpoint" {
+  description = "HTTP endpoint for the static website."
+  value       = "http://${aws_s3_bucket_website_configuration.this.website_endpoint}"
+}
+```
 
-      depends_on = [aws_s3_bucket_public_access_block.this]
-    }
-
-    resource "aws_s3_object" "index" {
-      bucket       = aws_s3_bucket.this.id
-      key          = "index.html"
-      source       = "${path.module}/index.html"
-      content_type = "text/html"
-    }
-    ```
-
-    ```hcl title="variables.tf"
-    variable "bucket_name" {
-      description = "Globally unique S3 bucket name."
-      type        = string
-    }
-    ```
-
-    ```hcl title="outputs.tf"
-    output "bucket_name" {
-      description = "Name of the S3 bucket."
-      value       = aws_s3_bucket.this.id
-    }
-
-    output "website_endpoint" {
-      description = "HTTP endpoint for the static website."
-      value       = "http://${aws_s3_bucket_website_configuration.this.website_endpoint}"
-    }
-    ```
-
-    ```html title="index.html"
-    <!DOCTYPE html>
-    <html lang="en">
-    <head><meta charset="UTF-8"><title>Hello from S3</title></head>
-    <body>
-      <h1>Hello from S3!</h1>
-      <p>This page is served directly from an S3 bucket.</p>
-    </body>
-    </html>
-    ```
+```html title="index.html"
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Hello from S3</title></head>
+<body>
+  <h1>Hello from S3!</h1>
+  <p>This page is served directly from an S3 bucket.</p>
+</body>
+</html>
+```
 
 ### Wire it into the full stack
 
-Like every module from VPC onwards, S3 is applied from `terraform/full-stack/` — not from the
-module directory itself. Child modules don't configure a provider; the full-stack root does.
-
-Add the module call to `terraform/full-stack/main.tf`:
+Add the S3 module to `terraform/full-stack/main.tf`:
 
 ```hcl
 module "s3" {
@@ -218,7 +184,7 @@ module "s3" {
 }
 ```
 
-And add the `bucket_name` variable to `terraform/full-stack/variables.tf`:
+Add `bucket_name` to `terraform/full-stack/variables.tf`:
 
 ```hcl
 variable "bucket_name" {
@@ -227,11 +193,6 @@ variable "bucket_name" {
 }
 ```
 
-!!! warning "Bucket names are globally unique"
-    If `<your-name>-traineeship-site` is already taken by another AWS account, `terraform apply`
-    will fail with `BucketAlreadyExists`. Add a short suffix (e.g. your initials or a number) to
-    make the name unique.
-
 ### Set your variables
 
 Add `bucket_name` to `terraform/full-stack/terraform.tfvars`:
@@ -239,6 +200,11 @@ Add `bucket_name` to `terraform/full-stack/terraform.tfvars`:
 ```hcl
 bucket_name = "<your-name>-traineeship-site"
 ```
+
+!!! warning "Bucket names are globally unique"
+    If `<your-name>-traineeship-site` is already taken by another AWS account, `terraform apply`
+    will fail with `BucketAlreadyExists`. Add a short suffix (e.g. your initials or a number) to
+    make the name unique.
 
 ### Apply
 
@@ -252,12 +218,6 @@ terraform apply
 
 After apply, Terraform prints the `website_endpoint` output. Open it in a browser — you should see
 your `index.html` served over HTTP.
-
-!!! failure "`Error: putting S3 Bucket Policy`"
-    If you see `Access Denied` when applying the bucket policy, the Block Public Access settings
-    haven't propagated yet. The `depends_on` in the solution handles this — if you wrote your own
-    module and hit this error, add `depends_on = [aws_s3_bucket_public_access_block.this]` to the
-    policy resource.
 
 ### Clean up
 
