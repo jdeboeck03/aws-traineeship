@@ -73,7 +73,9 @@ transition objects automatically.
 
 ## Provisioning with Terraform
 
-The S3 module creates a publicly readable static website bucket and uploads a minimal `index.html`.
+The S3 module is built in two passes: first a bucket that just hosts the file — private, like every
+new bucket — then the two resources that make it public. Seeing the `403` in between is the point:
+it's easy to assume static website hosting implies public access, and it doesn't.
 
 ### `terraform/s3/`
 
@@ -85,6 +87,8 @@ terraform/s3/
 └── index.html
 ```
 
+### Step 1 — a private bucket
+
 ```hcl title="main.tf"
 resource "aws_s3_bucket" "this" {
   bucket = var.bucket_name
@@ -92,15 +96,6 @@ resource "aws_s3_bucket" "this" {
   tags = {
     Name = var.bucket_name
   }
-}
-
-resource "aws_s3_bucket_public_access_block" "this" {
-  bucket = aws_s3_bucket.this.id
-
-  block_public_acls       = false
-  block_public_policy     = false
-  ignore_public_acls      = false
-  restrict_public_buckets = false
 }
 
 resource "aws_s3_bucket_website_configuration" "this" {
@@ -111,25 +106,6 @@ resource "aws_s3_bucket_website_configuration" "this" {
   }
 }
 
-resource "aws_s3_bucket_policy" "public_read" {
-  bucket = aws_s3_bucket.this.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect    = "Allow"
-        Principal = "*"
-        Action    = "s3:GetObject"
-        Resource  = "${aws_s3_bucket.this.arn}/*"
-      }
-    ]
-  })
-
-  # Block Public Access must be disabled before the policy can be applied.
-  depends_on = [aws_s3_bucket_public_access_block.this]
-}
-
 resource "aws_s3_object" "index" {
   bucket       = aws_s3_bucket.this.id
   key          = "index.html"
@@ -138,10 +114,10 @@ resource "aws_s3_object" "index" {
 }
 ```
 
-S3 configuration is split across multiple resources — `aws_s3_bucket` only creates the bucket;
-website hosting, public access settings, and policies are each their own resource. The `depends_on`
-on the policy is required: AWS rejects a public bucket policy while Block Public Access is still
-enabled, and Terraform needs an explicit hint to sequence them correctly.
+This is enough to get a `website_endpoint` output and an object sitting in the bucket — but nothing
+here grants anyone permission to read it. S3 objects are private by default: only the bucket owner
+(and whoever holds IAM permissions) can access them, independent of whether website hosting is
+configured.
 
 ```hcl title="variables.tf"
 variable "bucket_name" {
@@ -216,31 +192,11 @@ terraform plan
 terraform apply
 ```
 
-After apply, Terraform prints the `website_endpoint` output. Open it in a browser — you should see
-your `index.html` served over HTTP.
+After apply, Terraform prints the `website_endpoint` output.
 
-### See Block Public Access in action
+### Verify it's private
 
-The page loads because two things are true at once: the bucket policy grants `s3:GetObject` to
-everyone, **and** Block Public Access is disabled so that policy is allowed to take effect. Flip
-Block Public Access back on and re-apply to see the difference — the website endpoint doesn't
-change, only whether it serves anything.
-
-In `terraform/s3/main.tf`, set all four flags back to `true` (the default AWS applies to every new
-bucket):
-
-```hcl title="main.tf"
-resource "aws_s3_bucket_public_access_block" "this" {
-  bucket = aws_s3_bucket.this.id
-
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-```
-
-Apply, then request the same `website_endpoint` URL again:
+Request the endpoint:
 
 === "Linux / macOS"
 
@@ -255,12 +211,12 @@ Apply, then request the same `website_endpoint` URL again:
     Invoke-WebRequest -Uri $url -Method Head
     ```
 
-Both now return `403 Forbidden` — the object is still there and the bucket policy still exists, but
-Block Public Access overrides it. This is the same 403 you'd get if you deleted the bucket policy
-entirely; Block Public Access is a blanket override, not just "no policy means no access."
+You should get `403 Forbidden`. The endpoint exists and `index.html` is sitting in the bucket —
+there's just no policy telling S3 to let anyone but you read it.
 
-Set the four flags back to `false` and apply once more before moving on — the rest of today's
-modules assume the site is publicly reachable.
+### Step 2 — make it public
+
+Add two more resources to `terraform/s3/main.tf`:
 
 ```hcl title="main.tf"
 resource "aws_s3_bucket_public_access_block" "this" {
@@ -271,7 +227,43 @@ resource "aws_s3_bucket_public_access_block" "this" {
   ignore_public_acls      = false
   restrict_public_buckets = false
 }
+
+resource "aws_s3_bucket_policy" "public_read" {
+  bucket = aws_s3_bucket.this.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = "s3:GetObject"
+        Resource  = "${aws_s3_bucket.this.arn}/*"
+      }
+    ]
+  })
+
+  # Block Public Access must be disabled before the policy can be applied.
+  depends_on = [aws_s3_bucket_public_access_block.this]
+}
 ```
+
+Two things had to change, not one. The bucket policy grants `s3:GetObject` to everyone — but AWS
+also enables **Block Public Access** on every new bucket by default, four settings that override any
+policy or ACL that would make objects public. Without disabling it first, `terraform apply` would
+reject the policy outright. The `depends_on` is required because nothing in the policy's arguments
+references the access block, so Terraform has no other way to know it must be applied first.
+
+Re-apply from `terraform/full-stack`:
+
+```shell
+terraform apply
+```
+
+### Verify it's public
+
+Request the same URL again — it now returns `200 OK` and serves `index.html`. Open it in a browser
+to see the page itself.
 
 ### Clean up
 
@@ -295,10 +287,11 @@ terraform destroy
   structure — it's a flat namespace with `/` in key names as a naming convention.
 - Bucket names are globally unique across all AWS accounts. A name conflict from another account
   returns `BucketAlreadyExists`.
-- Block Public Access is on by default — you must explicitly turn it off before a bucket policy
-  can make objects public. This is a deliberate safety net.
-- Block Public Access overrides the bucket policy outright: flipping it back on returns
-  `403 Forbidden` even though the policy and the object are both still there.
+- A bucket's objects are private by default with no policy at all — static website hosting doesn't
+  imply public access, it only defines what S3 serves *if* something is allowed to read it.
+- Block Public Access is a second, independent safety net on top of that: on by default for every
+  new bucket, and it overrides any bucket policy or ACL that tries to make objects public. Both
+  layers have to be cleared before a public site works.
 - Bucket policies live on the resource (not on an IAM user/role) and control who can access
   objects. The `Resource` ARN must end in `/*` to grant access to objects, not just the bucket.
 - `aws_s3_bucket_public_access_block` and `aws_s3_bucket_policy` are separate resources from

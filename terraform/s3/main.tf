@@ -38,6 +38,7 @@ resource "aws_s3_bucket_policy" "public_read" {
     ]
   })
 
+  # Block Public Access must be disabled before the policy can be applied.
   depends_on = [aws_s3_bucket_public_access_block.this]
 }
 
