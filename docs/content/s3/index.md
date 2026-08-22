@@ -219,6 +219,60 @@ terraform apply
 After apply, Terraform prints the `website_endpoint` output. Open it in a browser — you should see
 your `index.html` served over HTTP.
 
+### See Block Public Access in action
+
+The page loads because two things are true at once: the bucket policy grants `s3:GetObject` to
+everyone, **and** Block Public Access is disabled so that policy is allowed to take effect. Flip
+Block Public Access back on and re-apply to see the difference — the website endpoint doesn't
+change, only whether it serves anything.
+
+In `terraform/s3/main.tf`, set all four flags back to `true` (the default AWS applies to every new
+bucket):
+
+```hcl title="main.tf"
+resource "aws_s3_bucket_public_access_block" "this" {
+  bucket = aws_s3_bucket.this.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+```
+
+Apply, then request the same `website_endpoint` URL again:
+
+=== "Linux / macOS"
+
+    ```shell
+    curl -I "$(terraform output -raw website_endpoint)"
+    ```
+
+=== "Windows (PowerShell)"
+
+    ```powershell
+    $url = terraform output -raw website_endpoint
+    Invoke-WebRequest -Uri $url -Method Head
+    ```
+
+Both now return `403 Forbidden` — the object is still there and the bucket policy still exists, but
+Block Public Access overrides it. This is the same 403 you'd get if you deleted the bucket policy
+entirely; Block Public Access is a blanket override, not just "no policy means no access."
+
+Set the four flags back to `false` and apply once more before moving on — the rest of today's
+modules assume the site is publicly reachable.
+
+```hcl title="main.tf"
+resource "aws_s3_bucket_public_access_block" "this" {
+  bucket = aws_s3_bucket.this.id
+
+  block_public_acls       = false
+  block_public_policy     = false
+  ignore_public_acls      = false
+  restrict_public_buckets = false
+}
+```
+
 ### Clean up
 
 The S3 resources are destroyed together with the rest of the stack at the end of the day:
@@ -243,6 +297,8 @@ terraform destroy
   returns `BucketAlreadyExists`.
 - Block Public Access is on by default — you must explicitly turn it off before a bucket policy
   can make objects public. This is a deliberate safety net.
+- Block Public Access overrides the bucket policy outright: flipping it back on returns
+  `403 Forbidden` even though the policy and the object are both still there.
 - Bucket policies live on the resource (not on an IAM user/role) and control who can access
   objects. The `Resource` ARN must end in `/*` to grant access to objects, not just the bucket.
 - `aws_s3_bucket_public_access_block` and `aws_s3_bucket_policy` are separate resources from
