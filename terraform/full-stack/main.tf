@@ -62,10 +62,16 @@ resource "aws_security_group" "ssh" {
   }
 }
 
+module "dynamodb" {
+  source = "../dynamodb"
+  name   = var.name
+}
+
 module "iam" {
-  source      = "../iam"
-  name        = var.name
-  bucket_name = var.bucket_name
+  source             = "../iam"
+  name               = var.name
+  bucket_name        = var.bucket_name
+  dynamodb_table_arn = module.dynamodb.table_arn
 }
 
 module "ec2" {

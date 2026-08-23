@@ -26,6 +26,7 @@ nav:
 - Terraform Modules: content/terraform-modules/index.md
 - S3: content/s3/index.md
 - IAM: content/iam/index.md
+- DynamoDB: content/dynamodb/index.md
 
 markdown_extensions:
 - admonition

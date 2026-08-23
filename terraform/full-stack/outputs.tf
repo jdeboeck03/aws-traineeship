@@ -32,3 +32,8 @@ output "website_endpoint" {
   description = "HTTP endpoint for the S3 static website."
   value       = module.s3.website_endpoint
 }
+
+output "dynamodb_table_name" {
+  description = "Name of the DynamoDB table."
+  value       = module.dynamodb.table_name
+}
