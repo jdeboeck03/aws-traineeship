@@ -37,3 +37,13 @@ output "dynamodb_table_name" {
   description = "Name of the DynamoDB table."
   value       = module.dynamodb.table_name
 }
+
+output "sqs_queue_url" {
+  description = "URL of the SQS queue."
+  value       = module.sqs.queue_url
+}
+
+output "sns_topic_arn" {
+  description = "ARN of the SNS topic."
+  value       = module.sns.topic_arn
+}

@@ -67,11 +67,25 @@ module "dynamodb" {
   name   = var.name
 }
 
+module "sqs" {
+  source = "../sqs"
+  name   = var.name
+}
+
+module "sns" {
+  source    = "../sns"
+  name      = var.name
+  queue_arn = module.sqs.queue_arn
+  queue_url = module.sqs.queue_url
+}
+
 module "iam" {
   source             = "../iam"
   name               = var.name
   bucket_name        = var.bucket_name
   dynamodb_table_arn = module.dynamodb.table_arn
+  sqs_queue_arn      = module.sqs.queue_arn
+  sns_topic_arn      = module.sns.topic_arn
 }
 
 module "ec2" {

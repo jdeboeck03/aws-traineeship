@@ -12,3 +12,13 @@ variable "dynamodb_table_arn" {
   description = "ARN of the DynamoDB table the EC2 role is allowed to read and write."
   type        = string
 }
+
+variable "sqs_queue_arn" {
+  description = "ARN of the SQS queue the EC2 role is allowed to send and receive messages from."
+  type        = string
+}
+
+variable "sns_topic_arn" {
+  description = "ARN of the SNS topic the EC2 role is allowed to publish to."
+  type        = string
+}
