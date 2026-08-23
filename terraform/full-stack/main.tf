@@ -12,6 +12,10 @@ terraform {
       source  = "hashicorp/local"
       version = "~> 2.0"
     }
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.0"
+    }
   }
 }
 
@@ -143,4 +147,12 @@ module "ecs" {
   sqs_queue_url       = module.sqs.queue_url
   sqs_queue_arn       = module.sqs.queue_arn
   sns_topic_arn       = module.sns.topic_arn
+}
+
+module "lambda" {
+  source = "../lambda"
+  name   = var.name
+
+  sns_topic_arn = module.sns.topic_arn
+  sqs_queue_arn = module.sqs.queue_arn
 }
