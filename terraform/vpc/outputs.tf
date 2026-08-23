@@ -7,3 +7,8 @@ output "public_subnet_id" {
   description = "ID of the public subnet."
   value       = aws_subnet.public.id
 }
+
+output "public_route_table_id" {
+  description = "ID of the public route table (used to associate additional subnets)."
+  value       = aws_route_table.public.id
+}

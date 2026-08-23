@@ -28,6 +28,7 @@ nav:
 - IAM: content/iam/index.md
 - DynamoDB: content/dynamodb/index.md
 - Messaging: content/messaging/index.md
+- ECS: content/ecs/index.md
 
 markdown_extensions:
 - admonition
