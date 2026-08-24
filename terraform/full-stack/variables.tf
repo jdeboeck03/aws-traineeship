@@ -28,8 +28,3 @@ variable "bucket_name" {
   description = "Globally unique S3 bucket name, e.g. <your-name>-traineeship-site."
   type        = string
 }
-
-variable "image_uri" {
-  description = "Full ECR image URI including tag, e.g. 123456789.dkr.ecr.eu-west-1.amazonaws.com/your-name:latest."
-  type        = string
-}
