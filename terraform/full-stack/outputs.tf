@@ -47,23 +47,3 @@ output "sns_topic_arn" {
   description = "ARN of the SNS topic."
   value       = module.sns.topic_arn
 }
-
-output "ecr_repository_url" {
-  description = "ECR repository URL (use this in docker tag/push commands)."
-  value       = module.ecr.repository_url
-}
-
-output "alb_dns_name" {
-  description = "URL of the Application Load Balancer."
-  value       = module.ecs.alb_dns_name
-}
-
-output "producer_function_name" {
-  description = "Name of the scheduled producer Lambda function."
-  value       = module.lambda.producer_function_name
-}
-
-output "consumer_function_name" {
-  description = "Name of the SQS consumer Lambda function."
-  value       = module.lambda.consumer_function_name
-}
