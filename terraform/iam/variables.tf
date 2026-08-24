@@ -14,11 +14,13 @@ variable "dynamodb_table_arn" {
 }
 
 variable "sqs_queue_arn" {
-  description = "ARN of the SQS queue the EC2 role is allowed to send and receive messages from."
+  description = "ARN of the SQS queue the EC2 role is allowed to send and receive messages from. Added in the messaging checkpoint."
   type        = string
+  default     = ""
 }
 
 variable "sns_topic_arn" {
-  description = "ARN of the SNS topic the EC2 role is allowed to publish to."
+  description = "ARN of the SNS topic the EC2 role is allowed to publish to. Added in the messaging checkpoint."
   type        = string
+  default     = ""
 }
