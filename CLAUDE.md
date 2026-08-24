@@ -122,6 +122,12 @@ point without commenting things out of `main`. Each checkpoint is cumulative:
 **Checkpoint branches do not contain `docs/`.** Documentation lives on `main` only — never edit
 docs on a checkpoint branch.
 
+**Checkpoint branches only contain the terraform module directories introduced up to that point.**
+`terraform/full-stack/` is always present; individual module directories (`terraform/ec2/`,
+`terraform/vpc/`, etc.) appear from their introducing checkpoint onwards and are absent before it.
+`checkpoint/01-ec2` contains only `terraform/ec2/` + `terraform/full-stack/`;
+`checkpoint/02-networking` adds `terraform/vpc/`; and so on.
+
 **Updating a checkpoint branch** (e.g. after fixing a bug in `terraform/ec2`):
 
 ```bash
