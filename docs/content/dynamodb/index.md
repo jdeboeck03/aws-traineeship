@@ -149,14 +149,19 @@ DynamoDB's wire format requires a type descriptor for every attribute value (`S`
     ```powershell
     $TABLE = terraform output -raw dynamodb_table_name
 
-    aws dynamodb put-item `
-      --table-name $TABLE `
-      --item '{
-        "title":    {"S": "The Pragmatic Programmer"},
-        "author":   {"S": "David Thomas"},
-        "year":     {"N": "1999"},
-        "available":{"BOOL": true}
-      }'
+    # PowerShell strips double quotes from inline strings passed to native executables.
+    # Write the JSON to a temp file and use file:// instead.
+    @'
+    {
+      "title":    {"S": "The Pragmatic Programmer"},
+      "author":   {"S": "David Thomas"},
+      "year":     {"N": "1999"},
+      "available":{"BOOL": true}
+    }
+    '@ | Set-Content item.json
+
+    aws dynamodb put-item --table-name $TABLE --item file://item.json
+    Remove-Item item.json
     ```
 
 Only `title` is required (it's the partition key). The other attributes — `author`, `year`,
@@ -175,7 +180,10 @@ Verify the item was written:
 === "Windows (PowerShell)"
 
     ```powershell
-    aws dynamodb get-item `
-      --table-name $TABLE `
-      --key '{"title": {"S": "The Pragmatic Programmer"}}'
+    @'
+    {"title": {"S": "The Pragmatic Programmer"}}
+    '@ | Set-Content key.json
+
+    aws dynamodb get-item --table-name $TABLE --key file://key.json
+    Remove-Item key.json
     ```
