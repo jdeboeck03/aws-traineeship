@@ -27,10 +27,10 @@ nav:
 - S3: content/s3/index.md
 - IAM: content/iam/index.md
 - DynamoDB: content/dynamodb/index.md
+- Create and Connect the App: content/app-integration/index.md
 - Messaging: content/messaging/index.md
 - ECS: content/ecs/index.md
 - Lambda: content/lambda/index.md
-- Create and Connect the App: content/app-integration/index.md
 
 markdown_extensions:
 - admonition
