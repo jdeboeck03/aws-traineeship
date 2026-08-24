@@ -1,42 +1,13 @@
-# Lambda — Serverless Functions
+# Lambda
 
 [AWS Lambda](https://aws.amazon.com/lambda/) lets you run code without managing servers. You
-upload a function, choose a trigger, and AWS handles scaling, retries, and patching. You pay only
-for the milliseconds your function runs.
+upload a function, choose a trigger, and AWS handles the rest. Two triggers are covered here: an
+**EventBridge schedule** (run every minute) and an **SQS event source mapping** (Lambda polls the
+queue automatically — no polling loop in your code).
 
-Two triggers are covered here:
+## Functions
 
-- **EventBridge schedule** — invoke the function on a cron/rate expression
-- **SQS event source mapping** — Lambda polls the queue and invokes the function when messages
-  arrive; no polling loop needed in your code
-
-!!! warning "Lambda consumer vs. in-app consumer"
-    The todo app's `QueueConsumer` and the Lambda consumer both read from the same SQS queue.
-    SQS delivers each message to exactly one receiver, so keep one or the other active — not both.
-
----
-
-!!! info "No manual exercise for this module"
-    From VPC onwards, modules go straight to Terraform. The IAM role, EventBridge rule, and event
-    source mapping are easier to follow in Terraform where all the pieces are visible at once.
-
----
-
-## `terraform/lambda/`
-
-```
-terraform/lambda/
-├── function/
-│   ├── producer.py   # EventBridge → SNS publish
-│   └── consumer.py   # SQS event source mapping
-├── main.tf
-├── variables.tf
-└── outputs.tf
-```
-
-### The functions
-
-```python title="function/producer.py"
+```python title="terraform/lambda/function/producer.py"
 import json, os, random
 import boto3
 
@@ -53,7 +24,7 @@ def handler(event, context):
     print(f"Published todo: {title}")
 ```
 
-```python title="function/consumer.py"
+```python title="terraform/lambda/function/consumer.py"
 import json
 
 def handler(event, context):
@@ -67,11 +38,9 @@ def handler(event, context):
         print(f"Consumed todo: {payload.get('title', payload)}")
 ```
 
-### `main.tf`
+## `terraform/lambda/`
 
 ```hcl title="main.tf"
-# Package .py files into zips at plan time.
-# source_code_hash detects edits and triggers a redeployment automatically.
 data "archive_file" "producer" {
   type        = "zip"
   source_file = "${path.module}/function/producer.py"
@@ -84,8 +53,7 @@ data "archive_file" "consumer" {
   output_path = "${path.module}/function/consumer.zip"
 }
 
-# Create log groups explicitly so retention is set before the first invocation.
-# Lambda auto-creates them on first run, but without a retention policy.
+# Explicit log groups so retention is set before the first invocation.
 resource "aws_cloudwatch_log_group" "producer" {
   name              = "/aws/lambda/${var.name}-producer"
   retention_in_days = 7
@@ -97,8 +65,6 @@ resource "aws_cloudwatch_log_group" "consumer" {
   retention_in_days = 7
   tags = { Name = "${var.name}-consumer-logs" }
 }
-
-# --- Producer role ---
 
 resource "aws_iam_role" "producer" {
   name = "${var.name}-lambda-producer-role"
@@ -136,8 +102,6 @@ resource "aws_iam_role_policy_attachment" "producer_sns" {
   policy_arn = aws_iam_policy.producer_sns.arn
 }
 
-# --- Producer function + EventBridge schedule ---
-
 resource "aws_lambda_function" "producer" {
   function_name    = "${var.name}-producer"
   handler          = "producer.handler"
@@ -145,11 +109,9 @@ resource "aws_lambda_function" "producer" {
   role             = aws_iam_role.producer.arn
   filename         = data.archive_file.producer.output_path
   source_code_hash = data.archive_file.producer.output_base64sha256
-
   environment {
     variables = { SNS_TOPIC_ARN = var.sns_topic_arn }
   }
-
   depends_on = [aws_cloudwatch_log_group.producer]
   tags = { Name = "${var.name}-producer" }
 }
@@ -165,8 +127,7 @@ resource "aws_cloudwatch_event_target" "producer" {
   arn  = aws_lambda_function.producer.arn
 }
 
-# Lambda requires a resource-based policy allowing EventBridge to invoke it.
-# An IAM role alone is not enough for cross-service triggers.
+# Lambda also needs a resource-based policy to allow EventBridge to invoke it.
 resource "aws_lambda_permission" "eventbridge" {
   statement_id  = "AllowEventBridgeInvoke"
   action        = "lambda:InvokeFunction"
@@ -175,10 +136,8 @@ resource "aws_lambda_permission" "eventbridge" {
   source_arn    = aws_cloudwatch_event_rule.schedule.arn
 }
 
-# --- Consumer role ---
-# AWSLambdaSQSQueueExecutionRole bundles CloudWatch Logs write access with the
-# SQS permissions Lambda needs to poll and delete messages on your behalf.
-
+# AWSLambdaSQSQueueExecutionRole bundles CloudWatch Logs + the SQS permissions
+# Lambda needs to poll and delete messages on your behalf.
 resource "aws_iam_role" "consumer" {
   name = "${var.name}-lambda-consumer-role"
   assume_role_policy = jsonencode({
@@ -197,8 +156,6 @@ resource "aws_iam_role_policy_attachment" "consumer_sqs" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole"
 }
 
-# --- Consumer function + SQS event source mapping ---
-
 resource "aws_lambda_function" "consumer" {
   function_name    = "${var.name}-consumer"
   handler          = "consumer.handler"
@@ -206,7 +163,6 @@ resource "aws_lambda_function" "consumer" {
   role             = aws_iam_role.consumer.arn
   filename         = data.archive_file.consumer.output_path
   source_code_hash = data.archive_file.consumer.output_base64sha256
-
   depends_on = [aws_cloudwatch_log_group.consumer]
   tags = { Name = "${var.name}-consumer" }
 }
@@ -219,42 +175,31 @@ resource "aws_lambda_event_source_mapping" "sqs" {
 }
 ```
 
-### `variables.tf`
-
 ```hcl title="variables.tf"
 variable "name" {
-  description = "Prefix used for all resource names."
-  type        = string
+  type = string
 }
 
 variable "sns_topic_arn" {
-  description = "ARN of the SNS topic the producer Lambda publishes to."
-  type        = string
+  type = string
 }
 
 variable "sqs_queue_arn" {
-  description = "ARN of the SQS queue the consumer Lambda reads from."
-  type        = string
+  type = string
 }
 ```
-
-### `outputs.tf`
 
 ```hcl title="outputs.tf"
 output "producer_function_name" {
-  description = "Name of the scheduled producer Lambda function."
-  value       = aws_lambda_function.producer.function_name
+  value = aws_lambda_function.producer.function_name
 }
 
 output "consumer_function_name" {
-  description = "Name of the SQS consumer Lambda function."
-  value       = aws_lambda_function.consumer.function_name
+  value = aws_lambda_function.consumer.function_name
 }
 ```
 
-### Wire it into the full stack
-
-Add to `terraform/full-stack/main.tf`:
+## Wire it into the full stack
 
 ```hcl title="terraform/full-stack/main.tf"
 module "lambda" {
@@ -266,7 +211,7 @@ module "lambda" {
 }
 ```
 
-Also add the `archive` provider to the `required_providers` block:
+Add the `archive` provider to `required_providers`:
 
 ```hcl
 archive = {
@@ -275,21 +220,19 @@ archive = {
 }
 ```
 
-### Apply
+## Apply
 
 ```shell
 cd terraform/full-stack
 
-terraform init   # picks up the lambda module + archive provider
+terraform init
 terraform plan
 terraform apply
 ```
 
----
-
 ## Verify
 
-Tail the producer's log group — you should see a new entry every minute:
+Tail the producer log group — a new line should appear every minute:
 
 === "Linux / macOS"
 
@@ -304,28 +247,3 @@ Tail the producer's log group — you should see a new entry every minute:
     $func = terraform output -raw producer_function_name
     aws logs tail "/aws/lambda/$func" --follow
     ```
-
-To trigger it immediately without waiting for the schedule:
-
-=== "Linux / macOS"
-
-    ```shell
-    aws lambda invoke --function-name "$FUNC" --payload '{}' /tmp/out.json
-    ```
-
-=== "Windows (PowerShell)"
-
-    ```powershell
-    aws lambda invoke --function-name $func --payload '{}' $env:TEMP\out.json
-    ```
-
-The consumer is invoked automatically when messages arrive in the queue. Check its log group
-in the same way using `consumer_function_name`.
-
----
-
-## Clean up
-
-```shell
-terraform destroy
-```
