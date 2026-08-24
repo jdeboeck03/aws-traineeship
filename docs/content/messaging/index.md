@@ -1,84 +1,25 @@
 # Messaging — SQS and SNS
 
-AWS has two complementary messaging services that often appear together. This module covers both,
-in order: SQS first on its own, then SNS layered on top.
+Two complementary messaging services that often appear together.
 
-## Concepts
+## SQS
 
-### SQS — the to-do list
+[Amazon Simple Queue Service (SQS)](https://aws.amazon.com/sqs/) is a managed message queue.
+A producer puts a message on the queue; a consumer polls, processes, then explicitly deletes it.
+SQS guarantees at-least-once delivery: if the consumer doesn't call `DeleteMessage` within the
+visibility timeout (default: 30 s), the message reappears and is delivered again. A dead-letter
+queue (DLQ) catches messages that have been received more than `maxReceiveCount` times without
+being deleted — useful for isolating poison messages.
 
-Amazon Simple Queue Service (SQS) is a managed message queue. A **producer** puts a message on the
-queue; a **consumer** polls for messages, processes each one, then explicitly deletes it. The
-message sits in the queue until someone picks it up.
+## SNS
 
-**Queue**
-The container for messages. You send to a queue URL and receive from the same URL.
+[Amazon Simple Notification Service (SNS)](https://aws.amazon.com/sns/) is a managed pub/sub
+service. A publisher sends one message to a topic; every subscriber receives a copy immediately.
+SNS pushes — it does not retain messages. Combining SNS with SQS gives durable fan-out: publish
+once to SNS, it delivers to every subscribed SQS queue, each queue holds the message until its
+consumer is ready.
 
-**Message**
-An opaque string payload (up to 256 KB). SQS doesn't interpret the content — it's the
-consumer's job to parse it.
-
-**Visibility timeout**
-When a consumer receives a message, SQS hides it from other consumers for a configurable period
-(default: 30 seconds). If the consumer deletes the message within that window, it's gone. If
-not — because the consumer crashed, timed out, or threw an exception — the message becomes
-visible again and is re-delivered. This is the mechanism behind at-least-once delivery.
-
-!!! note "Receive, then delete"
-    SQS never removes a message automatically after delivery. Your code is responsible for
-    calling `DeleteMessage` after successful processing. Forgetting the delete is the most common
-    SQS bug: messages keep reappearing and the consumer processes them repeatedly.
-
-**At-least-once delivery**
-SQS guarantees every message is delivered *at least* once. In rare cases (hardware failure,
-network partition) it may be delivered more than once. Consumers should handle duplicate messages
-gracefully — either by making operations idempotent or by tracking which messages have been
-processed.
-
-**Dead-letter queue (DLQ)**
-A second queue where messages end up after too many failed delivery attempts. If a message is
-received `maxReceiveCount` times (we use 3) without being deleted, SQS moves it to the DLQ
-automatically. The DLQ is where you look to understand *why* messages are failing — it's a
-safety net, not a primary queue.
-
-!!! note "Free tier"
-    SQS offers 1 million free requests per month with no 12-month expiry. Verify current limits at
-    [aws.amazon.com/free](https://aws.amazon.com/free).
-
----
-
-### SNS — the mailing list
-
-Amazon Simple Notification Service (SNS) is a managed pub/sub service. A **publisher** sends one
-message to a **topic**; all **subscribers** receive their own copy immediately. SNS pushes messages
-— it doesn't hold them.
-
-**Topic**
-The named channel that publishers send to and subscribers listen on.
-
-**Subscription**
-A registered endpoint that receives a copy of every message published to the topic. SNS supports
-multiple protocols: SQS queue, Lambda function, HTTP/S endpoint, email, and SMS. In this module
-we use SQS.
-
-**Fan-out**
-Because every subscriber gets a copy, one `Publish` call fans out to N downstream consumers. This
-is the primary reason to add SNS in front of SQS: when you have multiple independent consumers of
-the same event, you publish once and let SNS deliver to each.
-
-**Push-based delivery**
-SNS delivers immediately to all subscribers when you publish. There is no polling and no message
-retention — if a subscriber is down at the moment of delivery, that message is lost (unless the
-subscriber is an SQS queue, which buffers it).
-
-!!! note "Free tier"
-    SNS offers 1 million publishes and 100,000 HTTP/S deliveries per month with no 12-month
-    expiry. SQS deliveries from SNS are billed as SQS requests, not SNS deliveries. Verify
-    current limits at [aws.amazon.com/free](https://aws.amazon.com/free).
-
----
-
-### SQS vs SNS at a glance
+## SQS vs SNS at a glance
 
 | | SQS | SNS |
 |---|---|---|
@@ -90,33 +31,10 @@ subscriber is an SQS queue, which buffers it).
 
 ---
 
-### The SNS → SQS pattern
-
-SNS alone is fragile for durable workloads: if a subscriber is temporarily unavailable, the
-message is gone. SQS alone doesn't fan out: adding a second consumer means sending to each queue
-separately.
-
-Combining them gives you both properties: publish once to SNS, SNS fans out to each subscribed
-SQS queue, each queue retains the message until that consumer is ready to process it.
-
-```
-Publisher
-    └─► SNS topic
-             ├─► SQS queue A  (consumer A polls and processes at its own pace)
-             └─► SQS queue B  (consumer B polls and processes at its own pace)
-```
-
-Today we have one queue. Tomorrow you can subscribe a second one — the publisher doesn't change.
-
----
-
 !!! info "No manual exercise for this module"
     From VPC onwards, modules go straight to Terraform. Creating queues and topics by hand in the
     console doesn't build meaningfully more intuition than the concepts section, and manual cleanup
     is error-prone.
-
-    EC2 is the exception: launching an instance manually first makes AMIs, key pairs, and security
-    groups concrete before Terraform abstracts them away.
 
 ---
 
@@ -144,7 +62,7 @@ resource "aws_sqs_queue" "dlq" {
 resource "aws_sqs_queue" "this" {
   name                       = "${var.name}-queue"
   visibility_timeout_seconds = 30
-  message_retention_seconds  = 345600 # 4 days (default)
+  message_retention_seconds  = 345600 # 4 days
 
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.dlq.arn
@@ -157,10 +75,8 @@ resource "aws_sqs_queue" "this" {
 }
 ```
 
-The DLQ is declared first because the main queue's `redrive_policy` references its ARN. The
-`maxReceiveCount = 3` means a message that is received three times without being deleted moves to
-the DLQ — it won't keep hammering a broken consumer indefinitely. The DLQ uses a longer retention
-period (14 days vs. 4) so you have time to inspect failures before they expire.
+The DLQ is declared first because the main queue's `redrive_policy` references its ARN. Messages
+received three times without being deleted are moved to the DLQ automatically.
 
 ```hcl title="variables.tf"
 variable "name" {
@@ -211,8 +127,7 @@ module "iam" {
 }
 ```
 
-The IAM module gains a scoped SQS policy (`SendMessage`, `ReceiveMessage`, `DeleteMessage`,
-`GetQueueAttributes`) on this specific queue. Add the following to `terraform/iam/variables.tf`:
+Add to `terraform/iam/variables.tf`:
 
 ```hcl title="terraform/iam/variables.tf"
 variable "sqs_queue_arn" {
@@ -221,27 +136,20 @@ variable "sqs_queue_arn" {
 }
 ```
 
-And add the policy and attachment to `terraform/iam/main.tf`:
+Add to `terraform/iam/main.tf`:
 
 ```hcl title="terraform/iam/main.tf"
 resource "aws_iam_policy" "sqs" {
-  name        = "${var.name}-sqs"
-  description = "Send, receive, and delete messages on the SQS queue."
+  name = "${var.name}-sqs"
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "sqs:SendMessage",
-          "sqs:ReceiveMessage",
-          "sqs:DeleteMessage",
-          "sqs:GetQueueAttributes",
-        ]
-        Resource = var.sqs_queue_arn
-      }
-    ]
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["sqs:SendMessage", "sqs:ReceiveMessage",
+                  "sqs:DeleteMessage", "sqs:GetQueueAttributes"]
+      Resource = var.sqs_queue_arn
+    }]
   })
 
   tags = { Name = "${var.name}-sqs" }
@@ -253,7 +161,7 @@ resource "aws_iam_role_policy_attachment" "sqs" {
 }
 ```
 
-Add the queue URL to `terraform/full-stack/outputs.tf`:
+Add to `terraform/full-stack/outputs.tf`:
 
 ```hcl title="terraform/full-stack/outputs.tf"
 output "sqs_queue_url" {
@@ -272,11 +180,10 @@ terraform plan
 terraform apply
 ```
 
-After apply, Terraform prints `sqs_queue_url` — note it for the verify step.
-
 ### Verify
 
-Send a test message:
+Send a test message, receive it, then delete it using the `ReceiptHandle` from the receive
+response:
 
 === "Linux / macOS"
 
@@ -286,6 +193,12 @@ Send a test message:
     aws sqs send-message \
       --queue-url "$QUEUE_URL" \
       --message-body "hello from the CLI"
+
+    aws sqs receive-message --queue-url "$QUEUE_URL"
+
+    aws sqs delete-message \
+      --queue-url "$QUEUE_URL" \
+      --receipt-handle "<ReceiptHandle from above>"
     ```
 
 === "Windows (PowerShell)"
@@ -296,54 +209,22 @@ Send a test message:
     aws sqs send-message `
       --queue-url $queueUrl `
       --message-body "hello from the CLI"
-    ```
 
-Receive it (note the `receipt-handle` in the response — you need it to delete):
-
-=== "Linux / macOS"
-
-    ```shell
-    aws sqs receive-message --queue-url "$QUEUE_URL"
-    ```
-
-=== "Windows (PowerShell)"
-
-    ```powershell
     aws sqs receive-message --queue-url $queueUrl
-    ```
 
-Delete it using the `ReceiptHandle` from the receive response:
-
-=== "Linux / macOS"
-
-    ```shell
-    aws sqs delete-message \
-      --queue-url "$QUEUE_URL" \
-      --receipt-handle "<ReceiptHandle from above>"
-    ```
-
-=== "Windows (PowerShell)"
-
-    ```powershell
     aws sqs delete-message `
       --queue-url $queueUrl `
       --receipt-handle "<ReceiptHandle from above>"
     ```
 
-!!! note "Visibility timeout in action"
-    If you receive a message but don't delete it within 30 seconds, run `receive-message` again —
-    you'll get the same message back. This is the visibility timeout re-delivering it.
+If you receive a message but don't delete it within 30 seconds, running `receive-message` again
+returns the same message — the visibility timeout re-delivering it.
 
 ### Connecting the app
 
 The app sends a message when a todo is created and polls the queue on a schedule:
 
 ```java title="TodoCreatedListener.java — send"
-SqsClient sqsClient = SqsClient.builder()
-    .region(Region.EU_WEST_1)
-    .build();
-
-// Called after a todo is persisted to DynamoDB
 sqsClient.sendMessage(builder -> builder
     .queueUrl(QUEUE_URL)   // from terraform output sqs_queue_url
     .messageBody(todo.title())
@@ -351,24 +232,17 @@ sqsClient.sendMessage(builder -> builder
 ```
 
 ```java title="QueueConsumer.java — poll and delete"
-// @Scheduled(every = "10s")
-public void consume() {
-    ReceiveMessageResponse response = sqsClient.receiveMessage(builder ->
-        builder.queueUrl(QUEUE_URL));
+ReceiveMessageResponse response = sqsClient.receiveMessage(
+    builder -> builder.queueUrl(QUEUE_URL));
 
-    response.messages().forEach(message -> {
-        log.info("Received: {}", message.body());
-        // process the message ...
-        sqsClient.deleteMessage(builder -> builder
-            .queueUrl(QUEUE_URL)
-            .receiptHandle(message.receiptHandle())
-            .build());
-    });
-}
+response.messages().forEach(message -> {
+    log.info("Received: {}", message.body());
+    sqsClient.deleteMessage(builder -> builder
+        .queueUrl(QUEUE_URL)
+        .receiptHandle(message.receiptHandle())
+        .build());
+});
 ```
-
-The receive-then-delete contract is explicit: the `receiptHandle` returned with each message is the
-token you pass to `DeleteMessage`. Without it, the message reappears after the visibility timeout.
 
 ---
 
@@ -395,25 +269,20 @@ resource "aws_sns_topic" "this" {
   }
 }
 
-# Allow SNS to write to the SQS queue.
 resource "aws_sqs_queue_policy" "sns_to_sqs" {
   queue_url = var.queue_url
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Effect    = "Allow"
-        Principal = { Service = "sns.amazonaws.com" }
-        Action    = "sqs:SendMessage"
-        Resource  = var.queue_arn
-        Condition = {
-          ArnEquals = {
-            "aws:SourceArn" = aws_sns_topic.this.arn
-          }
-        }
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "sns.amazonaws.com" }
+      Action    = "sqs:SendMessage"
+      Resource  = var.queue_arn
+      Condition = {
+        ArnEquals = { "aws:SourceArn" = aws_sns_topic.this.arn }
       }
-    ]
+    }]
   })
 }
 
@@ -424,11 +293,8 @@ resource "aws_sns_topic_subscription" "sqs" {
 }
 ```
 
-Three resources, each doing one thing. The queue policy (`aws_sqs_queue_policy`) grants SNS
-permission to write to the SQS queue — without it, SNS silently drops messages because the queue
-rejects them. The `Condition` on `aws:SourceArn` scopes this permission to *your* topic only; any
-other SNS topic (including other trainees') cannot write to your queue. The subscription wires
-topic to queue.
+The queue policy grants SNS permission to write to the SQS queue — without it, SNS silently drops
+messages. The `aws:SourceArn` condition scopes the permission to your topic only.
 
 ```hcl title="variables.tf"
 variable "name" {
@@ -456,8 +322,6 @@ output "topic_arn" {
 
 ### Wire it into the full stack
 
-Add the SNS module to `terraform/full-stack/main.tf` and update the IAM module call:
-
 ```hcl title="terraform/full-stack/main.tf"
 module "sns" {
   source    = "../sns"
@@ -467,16 +331,12 @@ module "sns" {
 }
 
 module "iam" {
-  source             = "../iam"
-  name               = var.name
-  bucket_name        = var.bucket_name
-  dynamodb_table_arn = module.dynamodb.table_arn
-  sqs_queue_arn      = module.sqs.queue_arn
-  sns_topic_arn      = module.sns.topic_arn   # new
+  # ...existing inputs...
+  sns_topic_arn = module.sns.topic_arn   # new
 }
 ```
 
-Add the SNS variable and policy to the IAM module:
+Add to `terraform/iam/variables.tf`:
 
 ```hcl title="terraform/iam/variables.tf"
 variable "sns_topic_arn" {
@@ -485,20 +345,19 @@ variable "sns_topic_arn" {
 }
 ```
 
+Add to `terraform/iam/main.tf`:
+
 ```hcl title="terraform/iam/main.tf"
 resource "aws_iam_policy" "sns" {
-  name        = "${var.name}-sns"
-  description = "Publish to the SNS topic."
+  name = "${var.name}-sns"
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = "sns:Publish"
-        Resource = var.sns_topic_arn
-      }
-    ]
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "sns:Publish"
+      Resource = var.sns_topic_arn
+    }]
   })
 
   tags = { Name = "${var.name}-sns" }
@@ -510,7 +369,7 @@ resource "aws_iam_role_policy_attachment" "sns" {
 }
 ```
 
-Add the topic ARN to `terraform/full-stack/outputs.tf`:
+Add to `terraform/full-stack/outputs.tf`:
 
 ```hcl title="terraform/full-stack/outputs.tf"
 output "sns_topic_arn" {
@@ -529,7 +388,7 @@ terraform apply
 
 ### Verify
 
-Publish directly to the topic:
+Publish to the topic, then receive from the queue:
 
 === "Linux / macOS"
 
@@ -540,6 +399,8 @@ Publish directly to the topic:
     aws sns publish \
       --topic-arn "$TOPIC_ARN" \
       --message "hello via SNS"
+
+    aws sqs receive-message --queue-url "$QUEUE_URL"
     ```
 
 === "Windows (PowerShell)"
@@ -551,71 +412,30 @@ Publish directly to the topic:
     aws sns publish `
       --topic-arn $topicArn `
       --message "hello via SNS"
-    ```
 
-Now receive from the queue — the message arrived via SNS:
-
-=== "Linux / macOS"
-
-    ```shell
-    aws sqs receive-message --queue-url "$QUEUE_URL"
-    ```
-
-=== "Windows (PowerShell)"
-
-    ```powershell
     aws sqs receive-message --queue-url $queueUrl
     ```
 
-!!! note "SNS wraps the message"
-    The SQS message body won't be exactly `"hello via SNS"` — SNS wraps it in a JSON envelope
-    with metadata fields (`Type`, `MessageId`, `TopicArn`, `Message`, `Timestamp`, ...). The
-    original payload is under the `"Message"` key. The app needs to unwrap this when reading from
-    a topic-subscribed queue.
+!!! note "SNS envelope"
+    The SQS message body contains a JSON envelope — the original payload is under the `"Message"`
+    key. The app needs to unwrap this when reading from a topic-subscribed queue.
 
 ### Connecting the app
 
-One change in the publisher: switch from `SqsClient.sendMessage` to `SnsClient.publish`. The
-consumer is unchanged.
+Switch the publisher from `SqsClient.sendMessage` to `SnsClient.publish`. The consumer is
+unchanged.
 
 ```java title="TodoCreatedListener.java — publish to SNS"
-SnsClient snsClient = SnsClient.builder()
-    .region(Region.EU_WEST_1)
-    .build();
-
 snsClient.publish(builder -> builder
     .topicArn(TOPIC_ARN)   // from terraform output sns_topic_arn
     .message(todo.title())
     .build());
 ```
 
-The queue consumer still reads from SQS. It doesn't know — or care — whether the message came
-from a direct `SendMessage` or via an SNS topic. That independence is the point.
-
 ---
 
 ## Clean up
 
-All messaging resources are destroyed with the rest of the stack:
-
 ```shell
 terraform destroy
 ```
-
----
-
-## Key takeaways
-
-- SQS is pull-based: the consumer polls. SNS is push-based: it delivers immediately to all
-  subscribers. They solve different problems and are often used together.
-- SQS guarantees at-least-once delivery via the visibility timeout — a message reappears if the
-  consumer doesn't delete it within the window. **Always delete after processing.**
-- The dead-letter queue catches messages that repeatedly fail; it's where you look when something
-  is broken, not a normal processing path.
-- SNS → SQS gives durable fan-out: publish once, SNS delivers to every subscribed queue, each
-  queue holds the message until its consumer is ready. Adding a second consumer later requires no
-  change to the publisher.
-- The SQS queue policy must explicitly allow SNS to write to it. Without it, SNS silently drops
-  messages. Scope the permission with `aws:SourceArn` so only your topic can write to your queue.
-- SNS wraps messages in a JSON envelope when delivering to SQS — the consumer needs to unwrap it
-  to get the original payload.
