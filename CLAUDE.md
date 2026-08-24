@@ -100,6 +100,41 @@ This repo is public and deploys to GitHub Pages, so secret-leak prevention is la
    gitleaks' generic-api-key rule caught some random test values but not others. Treat scanning as
    a safety net, not a guarantee; the SSO-only model is the actual structural protection.
 
+## Branch strategy
+
+`main` is the only branch that matters for day-to-day work — documentation changes and Terraform
+additions always go here. GitHub Pages is deployed from `main`.
+
+`checkpoint/NN-topic` branches exist for trainers who want to test the stack from a clean starting
+point without commenting things out of `main`. Each checkpoint is cumulative:
+
+| Branch | Stack |
+|--------|-------|
+| `checkpoint/01-ec2` | EC2 only (default VPC) |
+| `checkpoint/02-networking` | + custom VPC + SSH security group |
+| `checkpoint/03-s3` | + S3 |
+| `checkpoint/04-dynamodb` | + DynamoDB |
+| `checkpoint/05-iam` | + IAM (S3 + DynamoDB policies; SQS/SNS not yet wired) |
+| `checkpoint/06-messaging` | + SQS + SNS (IAM gets full policies) |
+| `checkpoint/07-ecs` | + ECR + ECS + second public subnet |
+| `checkpoint/08-lambda` | + Lambda = full stack |
+
+**Checkpoint branches do not contain `docs/`.** Documentation lives on `main` only — never edit
+docs on a checkpoint branch.
+
+**Updating a checkpoint branch** (e.g. after fixing a bug in `terraform/ec2`):
+
+```bash
+git checkout checkpoint/01-ec2
+# make the fix
+git add terraform/ec2/
+git commit -m "fix: ..."
+git push origin checkpoint/01-ec2
+git checkout main
+```
+
+Repeat for any later checkpoints that are affected by the same fix.
+
 ## Structure
 
 - `docs/` — notes and documentation per AWS service
