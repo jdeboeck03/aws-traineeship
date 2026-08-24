@@ -57,13 +57,3 @@ output "alb_dns_name" {
   description = "URL of the Application Load Balancer."
   value       = module.ecs.alb_dns_name
 }
-
-output "producer_function_name" {
-  description = "Name of the scheduled producer Lambda function."
-  value       = module.lambda.producer_function_name
-}
-
-output "consumer_function_name" {
-  description = "Name of the SQS consumer Lambda function."
-  value       = module.lambda.consumer_function_name
-}

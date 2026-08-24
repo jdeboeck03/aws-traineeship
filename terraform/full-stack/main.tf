@@ -12,10 +12,6 @@ terraform {
       source  = "hashicorp/local"
       version = "~> 2.0"
     }
-    archive = {
-      source  = "hashicorp/archive"
-      version = "~> 2.0"
-    }
   }
 }
 
@@ -84,6 +80,11 @@ resource "aws_security_group" "ssh" {
   }
 }
 
+module "s3" {
+  source      = "../s3"
+  bucket_name = var.bucket_name
+}
+
 module "dynamodb" {
   source = "../dynamodb"
   name   = var.name
@@ -122,11 +123,6 @@ module "ec2" {
   iam_instance_profile = module.iam.instance_profile_name
 }
 
-module "s3" {
-  source      = "../s3"
-  bucket_name = var.bucket_name
-}
-
 module "ecr" {
   source = "../ecr"
   name   = var.name
@@ -147,12 +143,4 @@ module "ecs" {
   sqs_queue_url       = module.sqs.queue_url
   sqs_queue_arn       = module.sqs.queue_arn
   sns_topic_arn       = module.sns.topic_arn
-}
-
-module "lambda" {
-  source = "../lambda"
-  name   = var.name
-
-  sns_topic_arn = module.sns.topic_arn
-  sqs_queue_arn = module.sqs.queue_arn
 }
