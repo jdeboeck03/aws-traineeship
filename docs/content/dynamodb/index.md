@@ -122,3 +122,60 @@ terraform init   # picks up the new dynamodb module
 terraform plan
 terraform apply
 ```
+
+## Try it — put an item
+
+Once applied, grab the table name from Terraform output and write an item with the AWS CLI.
+DynamoDB's wire format requires a type descriptor for every attribute value (`S` = string,
+`N` = number, `BOOL` = boolean, etc.).
+
+=== "Linux / macOS"
+
+    ```bash
+    TABLE=$(terraform output -raw dynamodb_table_name)
+
+    aws dynamodb put-item \
+      --table-name "$TABLE" \
+      --item '{
+        "title":    {"S": "The Pragmatic Programmer"},
+        "author":   {"S": "David Thomas"},
+        "year":     {"N": "1999"},
+        "available":{"BOOL": true}
+      }'
+    ```
+
+=== "Windows (PowerShell)"
+
+    ```powershell
+    $TABLE = terraform output -raw dynamodb_table_name
+
+    aws dynamodb put-item `
+      --table-name $TABLE `
+      --item '{
+        "title":    {"S": "The Pragmatic Programmer"},
+        "author":   {"S": "David Thomas"},
+        "year":     {"N": "1999"},
+        "available":{"BOOL": true}
+      }'
+    ```
+
+Only `title` is required (it's the partition key). The other attributes — `author`, `year`,
+`available` — are free-form; a different item could have completely different attributes.
+
+Verify the item was written:
+
+=== "Linux / macOS"
+
+    ```bash
+    aws dynamodb get-item \
+      --table-name "$TABLE" \
+      --key '{"title": {"S": "The Pragmatic Programmer"}}'
+    ```
+
+=== "Windows (PowerShell)"
+
+    ```powershell
+    aws dynamodb get-item `
+      --table-name $TABLE `
+      --key '{"title": {"S": "The Pragmatic Programmer"}}'
+    ```
