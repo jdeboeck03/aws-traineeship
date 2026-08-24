@@ -122,27 +122,3 @@ terraform init   # picks up the new dynamodb module
 terraform plan
 terraform apply
 ```
-
-## Connecting the app
-
-The Quarkus app in `app/` uses the AWS SDK v2 to talk to the table. The SDK picks up credentials
-from the EC2 instance profile automatically — no access keys in configuration.
-
-```java title="DynamoDbRepository.java"
-DynamoDbClient client = DynamoDbClient.builder()
-    .region(Region.EU_WEST_1)
-    .build();
-
-// Write
-client.putItem(PutItemRequest.builder()
-    .tableName(TABLE_NAME)
-    .item(Map.of("title", AttributeValue.fromS(todo.title())))
-    .build());
-
-// Read all
-ScanResponse response = client.scan(
-    ScanRequest.builder().tableName(TABLE_NAME).build());
-```
-
-Activate the DynamoDB integration by swapping `@ApplicationScoped` from `InMemoryRepository` to
-`DynamoDbRepository`.

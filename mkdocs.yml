@@ -30,6 +30,7 @@ nav:
 - Messaging: content/messaging/index.md
 - ECS: content/ecs/index.md
 - Lambda: content/lambda/index.md
+- Create and Connect the App: content/app-integration/index.md
 
 markdown_extensions:
 - admonition
