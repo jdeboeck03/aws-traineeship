@@ -8,12 +8,13 @@ import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 import software.amazon.awssdk.services.dynamodb.model.ScanResponse;
 
+import jakarta.enterprise.context.ApplicationScoped;
+
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-// Uncomment @ApplicationScoped (and remove it from InMemoryRepository) to activate this repository.
-// @ApplicationScoped
+@ApplicationScoped
 public class DynamoDbRepository implements TodoRepository {
 
     private static final String TABLE_NAME = System.getenv("DYNAMODB_TABLE_NAME");

@@ -143,4 +143,6 @@ module "ecs" {
   sqs_queue_url       = module.sqs.queue_url
   sqs_queue_arn       = module.sqs.queue_arn
   sns_topic_arn       = module.sns.topic_arn
+  s3_bucket_name      = module.s3.bucket_name
+  s3_bucket_arn       = module.s3.bucket_arn
 }
