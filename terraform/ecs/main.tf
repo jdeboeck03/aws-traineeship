@@ -56,7 +56,7 @@ resource "aws_iam_role" "task" {
 
 resource "aws_iam_policy" "task" {
   name        = "${var.name}-ecs-task-policy"
-  description = "Grants the ECS task access to DynamoDB, SQS, and SNS."
+  description = "Grants the ECS task access to DynamoDB, S3, SQS, and SNS."
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -71,6 +71,11 @@ resource "aws_iam_policy" "task" {
           "dynamodb:Scan",
         ]
         Resource = var.dynamodb_table_arn
+      },
+      {
+        Effect   = "Allow"
+        Action   = "s3:PutObject"
+        Resource = "${var.s3_bucket_arn}/*"
       },
       {
         Effect = "Allow"
@@ -134,6 +139,7 @@ resource "aws_ecs_task_definition" "this" {
 
     environment = [
       { name = "DYNAMODB_TABLE_NAME", value = var.dynamodb_table_name },
+      { name = "S3_BUCKET_NAME",      value = var.s3_bucket_name },
       { name = "SQS_QUEUE_URL",       value = var.sqs_queue_url },
       { name = "SNS_TOPIC_ARN",       value = var.sns_topic_arn },
     ]

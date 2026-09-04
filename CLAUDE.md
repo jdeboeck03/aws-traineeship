@@ -114,10 +114,12 @@ point without commenting things out of `main`. Each checkpoint is cumulative:
 | `checkpoint/02-networking` | + custom VPC + SSH security group |
 | `checkpoint/03-s3` | + S3 |
 | `checkpoint/04-dynamodb` | + DynamoDB |
-| `checkpoint/05-iam` | + IAM (S3 + DynamoDB policies; SQS/SNS not yet wired) |
-| `checkpoint/06-messaging` | + SQS + SNS (IAM gets full policies) |
-| `checkpoint/07-ecs` | + ECR + ECS + second public subnet |
-| `checkpoint/08-lambda` | + Lambda = full stack |
+| `checkpoint/05-iam` | + IAM (S3 + DynamoDB policies; SQS/SNS not yet wired) + `app/` (nothing activated) |
+| `checkpoint/05a-app-dynamodb` | same Terraform as 05-iam; app with DynamoDB activated |
+| `checkpoint/05b-app-s3` | same Terraform as 05-iam; app with DynamoDB + S3 backup activated |
+| `checkpoint/06-messaging` | + SQS + SNS (IAM gets full policies); app in 05b state |
+| `checkpoint/07-ecs` | + ECR + ECS (with S3 env var + PutObject policy) + second public subnet; app in 05b state |
+| `checkpoint/08-lambda` | + Lambda = full stack; app in 05b state |
 
 **Checkpoint branches do not contain `docs/`.** Documentation lives on `main` only — never edit
 docs on a checkpoint branch.

@@ -48,3 +48,13 @@ variable "sns_topic_arn" {
   description = "ARN of the SNS topic, passed to the container and used to scope the task IAM policy."
   type        = string
 }
+
+variable "s3_bucket_name" {
+  description = "S3 bucket name passed to the container as an environment variable."
+  type        = string
+}
+
+variable "s3_bucket_arn" {
+  description = "ARN of the S3 bucket, used to scope the task IAM policy."
+  type        = string
+}
