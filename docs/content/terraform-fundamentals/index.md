@@ -1,15 +1,37 @@
 # Terraform Fundamentals
 
-Every module in this traineeship is provisioned with **Terraform** instead of clicking through the
-AWS console. This section covers the concepts and workflow you'll reuse in every module from here
-on — EC2 is the first place you'll apply them.
+You've just seen what clicking through the AWS console looks like for EC2. It works, but it isn't
+repeatable, reviewable, or easy to tear down cleanly. This section introduces **Terraform** — the
+infrastructure-as-code tool you'll use for every module from here on.
 
 ## Why infrastructure as code
 
-Clicking through the console works once, but it isn't repeatable, reviewable, or easy to tear
-down cleanly. Terraform lets you describe the resources you want in files, so creating,
-changing, and destroying infrastructure becomes a matter of running a command rather than
+Clicking through the console works once, but you can't review it, diff it, or reproduce it
+reliably on the next account. Terraform lets you describe the resources you want in files, so
+creating, changing, and destroying infrastructure becomes a matter of running a command rather than
 remembering which buttons you clicked.
+
+## Why Terraform and not CloudFormation?
+
+AWS ships its own infrastructure-as-code tool: **CloudFormation**. It uses JSON or YAML templates
+and integrates natively with the AWS console — you can inspect every stack, its status, and its
+events directly in the CloudFormation pane. If you read AWS documentation or follow an official
+tutorial, you'll encounter it constantly.
+
+This traineeship uses Terraform instead, for three practical reasons:
+
+1. **Industry adoption.** Most Belgian companies and Axxes clients run Terraform for their
+   infrastructure. What you learn here maps directly to real-world projects.
+2. **Multi-cloud.** Terraform works against any provider — AWS, Azure, GCP, Kubernetes, GitHub, and
+   hundreds more. The concepts transfer; CloudFormation is AWS-only.
+3. **Developer experience.** HCL (HashiCorp Configuration Language) is more concise than equivalent
+   CloudFormation YAML/JSON, and the [Terraform Registry](https://registry.terraform.io) makes
+   resource arguments easy to look up.
+
+CloudFormation is not a bad tool — you'll find it in existing AWS accounts, official AWS
+reference architectures, and the documentation for every service. It's worth knowing it exists and
+being able to read a template. But for building new infrastructure in this traineeship, Terraform is
+the right choice.
 
 ## Installation
 

@@ -141,6 +141,18 @@ git checkout main
 
 Repeat for any later checkpoints that are affected by the same fix.
 
+**After every change on `main`, always ask: do any checkpoint branches need updating?**
+Use this checklist:
+
+- Did you change anything under `terraform/`? → update every checkpoint branch that includes that
+  module directory and all later ones (they're cumulative).
+- Did you change `docs/`, `mkdocs.yml`, or any repo-root file? → no checkpoint update needed
+  (`docs/` doesn't exist on checkpoint branches).
+- Did you change `terraform/full-stack/`? → update every checkpoint branch (it's always present).
+
+If checkpoint branches do need updating, apply the fix to each affected branch in order (earliest
+first) and push each one before moving to the next.
+
 ## Structure
 
 - `docs/` — notes and documentation per AWS service

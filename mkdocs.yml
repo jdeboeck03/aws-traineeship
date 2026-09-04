@@ -20,8 +20,9 @@ nav:
 - Welcome: index.md
 - Getting Started: content/getting-started/index.md
 - Tagging: content/tagging/index.md
-- Terraform Fundamentals: content/terraform-fundamentals/index.md
 - EC2: content/ec2/index.md
+- Terraform Fundamentals: content/terraform-fundamentals/index.md
+- EC2 with Terraform: content/ec2-terraform/index.md
 - Networking: content/networking/index.md
 - Terraform Modules: content/terraform-modules/index.md
 - S3: content/s3/index.md
