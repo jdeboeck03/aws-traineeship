@@ -21,14 +21,13 @@ public class S3BackupListener {
     }
 
     public void onCreated(Todo todo) {
-        // Uncomment to back up each new todo to S3 as a JSON object.
-        // String key = "todos/" + System.currentTimeMillis() + ".json";
-        // s3Client.putObject(
-        //         PutObjectRequest.builder()
-        //                 .bucket(BUCKET_NAME)
-        //                 .key(key)
-        //                 .contentType("application/json")
-        //                 .build(),
-        //         RequestBody.fromString("{\"title\":\"" + todo.title() + "\"}"));
+        String key = "todos/" + System.currentTimeMillis() + ".json";
+        s3Client.putObject(
+                PutObjectRequest.builder()
+                        .bucket(BUCKET_NAME)
+                        .key(key)
+                        .contentType("application/json")
+                        .build(),
+                RequestBody.fromString("{\"title\":\"" + todo.title() + "\"}"));
     }
 }
