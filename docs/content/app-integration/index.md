@@ -1,22 +1,42 @@
 # Create and Connect the App
 
-The Quarkus app in `app/` is a simple todo API. Out of the box it stores todos in memory — nothing
-persists across restarts. In this section you'll wire it to the AWS services you've already
-provisioned: first DynamoDB (persistent storage), then S3 (backup on every write).
+In this section you'll build a Quarkus todo API and wire it to the AWS services you've already
+provisioned: DynamoDB for persistent storage and S3 for a backup on every write.
 
 The app uses the AWS SDK for Java v2. It authenticates via the
-[Default Credential Provider Chain](https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/credentials-chain.html),
-so it picks up your SSO session automatically — no access keys in the code or config.
+[Default Credential Provider Chain](https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/credentials-chain.html)
+— the same code that picks up your local SSO session will automatically use the ECS task role
+when the app runs in the cloud. No credentials in code or config.
+
+!!! tip "Starting point"
+    You need a working Quarkus todo API before continuing. If you don't have one yet, generate a
+    project at [code.quarkus.io](https://code.quarkus.io) with **RESTEasy** and
+    **RESTEasy Jackson**, then add `GET /todo` and `POST /todo` endpoints backed by an in-memory
+    store.
+
+---
+
+## Dependencies
+
+Add the AWS SDK BOM to `dependencyManagement` (so all SDK modules share one version), then pull
+in the modules you need:
+
+```
+software.amazon.awssdk:bom          ← version lock, type pom, scope import
+software.amazon.awssdk:dynamodb
+software.amazon.awssdk:s3
+software.amazon.awssdk:netty-nio-client
+```
+
+---
 
 ## Running the app locally
 
-Set the two environment variables the app reads at startup, then launch Quarkus in dev mode:
+Set the environment variables the app reads at startup, then launch Quarkus in dev mode:
 
 === "Linux / macOS"
 
     ```shell
-    cd app
-
     export DYNAMODB_TABLE_NAME=<your-table-name>
     export S3_BUCKET_NAME=<your-bucket-name>
 
@@ -26,32 +46,27 @@ Set the two environment variables the app reads at startup, then launch Quarkus 
 === "Windows (PowerShell)"
 
     ```powershell
-    cd app
-
     $env:DYNAMODB_TABLE_NAME = "<your-table-name>"
     $env:S3_BUCKET_NAME = "<your-bucket-name>"
 
     ./mvnw quarkus:dev
     ```
 
-The app starts on port 8080. You can use `curl`, a REST client, or the Quarkus Dev UI at
-`http://localhost:8080/q/dev`.
+The app starts on port 8080.
 
 !!! note "Make sure your SSO session is active"
-    The SDK picks up credentials from `~/.aws/sso/cache/`. Run
-    `aws sso login --profile traineeship` before starting the app if your session has expired.
+    Run `aws sso login --profile traineeship` before starting the app if your session has expired.
 
 ---
 
 ## DynamoDB — persistent storage
 
-### What the code does
+### The repository
 
-Open `DynamoDbRepository.java`:
+Create a `DynamoDbRepository` that implements your `TodoRepository` interface:
 
 ```java
-// Uncomment @ApplicationScoped (and remove it from InMemoryRepository) to activate.
-// @ApplicationScoped
+@ApplicationScoped
 public class DynamoDbRepository implements TodoRepository {
 
     private static final String TABLE_NAME = System.getenv("DYNAMODB_TABLE_NAME");
@@ -84,22 +99,19 @@ public class DynamoDbRepository implements TodoRepository {
 }
 ```
 
-- `getAll()` does a full table **Scan** and maps each item's `title` attribute to a `Todo` object.
+- `getAll()` runs a full table **Scan** and maps each item's `title` attribute back to a `Todo`.
 - `create()` calls **PutItem** with a single string attribute — matching the `title` partition key
-  defined in the Terraform module.
-- The table name is injected via `DYNAMODB_TABLE_NAME` so the same code works locally and in ECS.
+  defined in your Terraform module.
+- The table name comes from `DYNAMODB_TABLE_NAME` so the same binary works locally and in ECS.
 
-### Activate it
-
-`DynamoDbRepository` and `InMemoryRepository` both implement `TodoRepository`. CDI picks whichever
-one is annotated `@ApplicationScoped`. To switch:
-
-1. In `DynamoDbRepository.java`, uncomment `@ApplicationScoped`.
-2. In `InMemoryRepository.java`, remove `@ApplicationScoped`.
+!!! tip "CDI picks exactly one implementation"
+    CDI resolves `TodoRepository` to whichever implementation carries `@ApplicationScoped`. If
+    you have an `InMemoryRepository` with that annotation, remove it — otherwise CDI sees two
+    candidates and fails to start.
 
 ### Verify
 
-With the app running, create a todo:
+Create a todo:
 
 ```shell
 curl -s -X POST http://localhost:8080/todo \
@@ -107,7 +119,7 @@ curl -s -X POST http://localhost:8080/todo \
   -d '{"title": "learn DynamoDB"}'
 ```
 
-Then confirm it landed in the table:
+Confirm it landed in the table:
 
 ```shell
 aws dynamodb scan \
@@ -115,16 +127,16 @@ aws dynamodb scan \
   --region eu-west-1
 ```
 
-You should see the item in the response. Restart the app (`Ctrl+C`, then `./mvnw quarkus:dev`
-again) and call `GET /todo` — the item is still there, now coming from DynamoDB rather than memory.
+Restart the app and call `GET /todo` — the item is still there, now coming from DynamoDB rather
+than memory.
 
 ---
 
 ## S3 — backup on write
 
-### What the code does
+### The listener
 
-Open `S3BackupListener.java`:
+Create an `S3BackupListener` that uploads a JSON object to S3 every time a todo is created:
 
 ```java
 @ApplicationScoped
@@ -141,30 +153,53 @@ public class S3BackupListener {
     }
 
     public void onCreated(Todo todo) {
-        // Uncomment to back up each new todo to S3 as a JSON object.
-        // String key = "todos/" + System.currentTimeMillis() + ".json";
-        // s3Client.putObject(
-        //         PutObjectRequest.builder()
-        //                 .bucket(BUCKET_NAME)
-        //                 .key(key)
-        //                 .contentType("application/json")
-        //                 .build(),
-        //         RequestBody.fromString("{\"title\":\"" + todo.title() + "\"}"));
+        String key = "todos/" + System.currentTimeMillis() + ".json";
+        s3Client.putObject(
+                PutObjectRequest.builder()
+                        .bucket(BUCKET_NAME)
+                        .key(key)
+                        .contentType("application/json")
+                        .build(),
+                RequestBody.fromString("{\"title\":\"" + todo.title() + "\"}"));
     }
 }
 ```
 
-`onCreated` is called from `TodoServiceImpl` every time a todo is created. Right now it's a no-op.
-When you uncomment the body, each create request uploads a small JSON object to the `todos/`
-prefix of your bucket — keyed by the current timestamp so every write produces a unique object.
+Using the current timestamp as the key ensures every write produces a unique object under the
+`todos/` prefix.
 
-### Activate it
+### Wire it into your service
 
-Uncomment the four lines inside `onCreated` in `S3BackupListener.java`.
+Inject `S3BackupListener` into your service and call `onCreated` after each create:
+
+```java
+@ApplicationScoped
+public class TodoServiceImpl implements TodoService {
+
+    private final TodoRepository repository;
+    private final S3BackupListener s3Backup;
+
+    public TodoServiceImpl(TodoRepository repository, S3BackupListener s3Backup) {
+        this.repository = repository;
+        this.s3Backup = s3Backup;
+    }
+
+    @Override
+    public List<Todo> getAll() {
+        return repository.getAll();
+    }
+
+    @Override
+    public void create(Todo todo) {
+        repository.create(todo);
+        s3Backup.onCreated(todo);
+    }
+}
+```
 
 ### Verify
 
-Create another todo:
+Create a todo:
 
 ```shell
 curl -s -X POST http://localhost:8080/todo \
@@ -172,13 +207,13 @@ curl -s -X POST http://localhost:8080/todo \
   -d '{"title": "learn S3"}'
 ```
 
-Then list the objects in your bucket:
+List the objects in your bucket:
 
 ```shell
 aws s3 ls s3://<your-bucket-name>/todos/ --region eu-west-1
 ```
 
-You should see a `.json` file appear under `todos/`. Download and inspect it:
+You should see a `.json` file under `todos/`. Download and inspect it:
 
 === "Linux / macOS"
 
@@ -200,11 +235,11 @@ You should see a `.json` file appear under `todos/`. Download and inspect it:
 
 ## Key takeaways
 
-- The Default Credential Provider Chain means no credentials in code — the same app binary works
-  locally (SSO session) and in ECS (task role), with no code change.
-- Switching from `InMemoryRepository` to `DynamoDbRepository` is a single CDI annotation swap —
-  the rest of the app doesn't change.
-- `S3BackupListener` is always wired in by CDI; only the upload body is toggled. This is a common
-  pattern for feature flags in CDI apps.
-- When the app moves to ECS (later module), `DYNAMODB_TABLE_NAME` and `S3_BUCKET_NAME` are
-  injected by the task definition — the same env-var contract works both locally and in the cloud.
+- The Default Credential Provider Chain means no credentials in code — the same binary works
+  locally (SSO session) and in ECS (task role) without any changes.
+- CDI resolves `TodoRepository` to whichever implementation is `@ApplicationScoped` — switching
+  storage backends is a single annotation change.
+- `S3BackupListener` is a plain CDI bean called explicitly from the service — nothing framework-
+  specific, straightforward to test.
+- When the app moves to ECS, `DYNAMODB_TABLE_NAME` and `S3_BUCKET_NAME` are injected by the task
+  definition — the same env-var contract works both locally and in the cloud.
