@@ -10,11 +10,11 @@ import java.util.List;
 public class TodoServiceImpl implements TodoService {
 
     private final TodoRepository repository;
-    private final TodoCreatedListener listener;
+    private final S3BackupListener s3Backup;
 
-    public TodoServiceImpl(TodoRepository repository, TodoCreatedListener listener) {
+    public TodoServiceImpl(TodoRepository repository, S3BackupListener s3Backup) {
         this.repository = repository;
-        this.listener = listener;
+        this.s3Backup = s3Backup;
     }
 
     @Override
@@ -25,6 +25,6 @@ public class TodoServiceImpl implements TodoService {
     @Override
     public void create(Todo todo) {
         repository.create(todo);
-        listener.onCreated(todo);
+        s3Backup.onCreated(todo);
     }
 }
