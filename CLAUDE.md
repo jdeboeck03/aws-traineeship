@@ -113,6 +113,7 @@ point without commenting things out of `main`. Each checkpoint is cumulative:
 | `checkpoint/01-ec2` | EC2 only (default VPC) |
 | `checkpoint/02-networking` | + custom VPC + SSH security group |
 | `checkpoint/03-s3` | + S3 |
+| `checkpoint/03a-s3-sdk` | same Terraform as 03-s3; lean app (InMemory + S3 backup active) + `scripts/s3_example.py` |
 | `checkpoint/04-dynamodb` | + DynamoDB |
 | `checkpoint/05-iam` | + IAM (S3 + DynamoDB policies; SQS/SNS not yet wired) + `app/` (nothing activated) |
 | `checkpoint/05a-app-dynamodb` | same Terraform as 05-iam; app with DynamoDB activated |
